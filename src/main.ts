@@ -895,6 +895,8 @@ function renderConversation() {
       try {
         await replaceSelection(token, answer);
         toast("Replacement sent to the original text field");
+      } catch (error) {
+        chatError = String(error);
       } finally {
         replacing = false;
         renderConversation();

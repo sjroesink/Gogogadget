@@ -20,8 +20,9 @@ use windows::Win32::{
     UI::{
         Accessibility::{
             CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationTextPattern,
-            IUIAutomationTextRange, TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
-            UIA_IsReadOnlyAttributeId, UIA_TextPatternId,
+            IUIAutomationTextRange, IUIAutomationValuePattern, TextPatternRangeEndpoint_End,
+            TextPatternRangeEndpoint_Start, UIA_IsReadOnlyAttributeId, UIA_TextPatternId,
+            UIA_ValuePatternId,
         },
         Input::KeyboardAndMouse::{
             GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
@@ -137,7 +138,7 @@ unsafe fn capture_now(
             CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)?;
         let element = automation.GetFocusedElement()?;
         if element.CurrentIsPassword()?.as_bool()
-            || element.CurrentProcessId()? == std::process::id() as i32
+            || (!cfg!(test) && element.CurrentProcessId()? == std::process::id() as i32)
         {
             return Ok((Snapshot::default(), None));
         }
@@ -213,44 +214,103 @@ unsafe fn replace_now(
     owner: HWND,
     deadline: Instant,
 ) -> Result<(), String> {
-    let inspect = || -> windows::core::Result<bool> {
-        if !IsWindow(Some(target.window)).as_bool()
-            || target.element.CurrentIsPassword()?.as_bool()
-            || !target.element.CurrentIsEnabled()?.as_bool()
+    let available = target
+        .element
+        .CurrentIsEnabled()
+        .map_err(|e| format!("The original field is unavailable: {e}"))?
+        .as_bool();
+    if !IsWindow(Some(target.window)).as_bool() || !available {
+        return Err("The original window is closed or its text field is disabled.".into());
+    }
+    if target
+        .element
+        .CurrentIsPassword()
+        .map_err(|e| e.to_string())?
+        .as_bool()
+    {
+        return Err("Password fields cannot be replaced.".into());
+    }
+    // Foreground activation crosses input queues and is asynchronous. Do not
+    // interpret its immediate return value as proof that focus has settled.
+    let _ = SetForegroundWindow(target.window);
+    wait_until(deadline, || Ok(GetForegroundWindow() == target.window)).map_err(|_| {
+        "Windows could not activate the original window. Open it and select the text again."
+            .to_string()
+    })?;
+    // Allow the source app to restore its own focused control before requesting
+    // UIA SetFocus, which can collapse selections in some editors.
+    let focus_deadline = deadline.min(Instant::now() + Duration::from_millis(250));
+    if wait_until(focus_deadline, || {
+        target
+            .element
+            .CurrentHasKeyboardFocus()
+            .map(|v| v.as_bool())
+            .map_err(|e| e.to_string())
+    })
+    .is_err()
+    {
+        target
+            .element
+            .SetFocus()
+            .map_err(|e| format!("Could not focus the original text field: {e}"))?;
+        wait_until(deadline, || {
+            target
+                .element
+                .CurrentHasKeyboardFocus()
+                .map(|v| v.as_bool())
+                .map_err(|e| e.to_string())
+        })
+        .map_err(|_| "The original text field did not regain keyboard focus.".to_string())?;
+    }
+    let pattern: IUIAutomationTextPattern =
+        target
+            .element
+            .GetCurrentPatternAs(UIA_TextPatternId)
+            .map_err(|e| format!("The original selection is unavailable: {e}"))?;
+    let ranges = pattern.GetSelection().map_err(|e| e.to_string())?;
+    if ranges.Length().map_err(|e| e.to_string())? != 1 {
+        return Err("The original field no longer has exactly one selection.".into());
+    }
+    let current = ranges.GetElement(0).map_err(|e| e.to_string())?;
+    let readonly = current
+        .GetAttributeValue(UIA_IsReadOnlyAttributeId)
+        .ok()
+        .and_then(|v| bool::try_from(&v).ok())
+        .or_else(|| {
+            target
+                .element
+                .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)
+                .ok()
+                .and_then(|p| p.CurrentIsReadOnly().ok())
+                .map(|v| v.as_bool())
+        });
+    match readonly {
+        Some(false) => {}
+        Some(true) => return Err("The original text field reports that it is read-only.".into()),
+        None => {
+            return Err(
+                "This editor does not report whether its selection is editable. Use Copy response."
+                    .into(),
+            )
+        }
+    }
+    if current.GetText(100_001).map_err(|e| e.to_string())? != target.text {
+        return Err(
+            "The selected text changed after the action started. Select it again with Ctrl+Alt+T."
+                .into(),
+        );
+    }
+    for endpoint in [TextPatternRangeEndpoint_Start, TextPatternRangeEndpoint_End] {
+        if current
+            .CompareEndpoints(endpoint, &target.range, endpoint)
+            .map_err(|e| format!("The saved selection expired: {e}"))?
+            != 0
         {
-            return Ok(false);
+            return Err(
+                "The selection moved to a different position. Select it again with Ctrl+Alt+T."
+                    .into(),
+            );
         }
-        // Unknown/read-only ranges fail closed, including terminal output.
-        let read_only = target.range.GetAttributeValue(UIA_IsReadOnlyAttributeId)?;
-        if bool::try_from(&read_only).unwrap_or(true) {
-            return Ok(false);
-        }
-        if Instant::now() > deadline || !SetForegroundWindow(target.window).as_bool() {
-            return Ok(false);
-        }
-        target.element.SetFocus()?;
-        let pattern: IUIAutomationTextPattern =
-            target.element.GetCurrentPatternAs(UIA_TextPatternId)?;
-        let ranges = pattern.GetSelection()?;
-        if ranges.Length()? != 1 {
-            return Ok(false);
-        }
-        let current = ranges.GetElement(0)?;
-        Ok(current.GetText(100_001)? == target.text
-            && current.CompareEndpoints(
-                TextPatternRangeEndpoint_Start,
-                &target.range,
-                TextPatternRangeEndpoint_Start,
-            )? == 0
-            && current.CompareEndpoints(
-                TextPatternRangeEndpoint_End,
-                &target.range,
-                TextPatternRangeEndpoint_End,
-            )? == 0
-            && target.element.CurrentHasKeyboardFocus()?.as_bool())
-    };
-    if !inspect().map_err(|_| "The original text field is no longer available.".to_string())? {
-        return Err("The selection changed or the field is not editable. Select the text again, or use Copy response.".into());
     }
     let inputs = paste_inputs();
     if Instant::now() > deadline
@@ -354,9 +414,209 @@ unsafe fn write_clipboard(owner: HWND, text: &str) -> windows::core::Result<u32>
     }
     result.map(|_| GetClipboardSequenceNumber())
 }
+
+fn wait_until(
+    deadline: Instant,
+    mut ready: impl FnMut() -> Result<bool, String>,
+) -> Result<(), String> {
+    loop {
+        if Instant::now() >= deadline {
+            return Err("Focus transition timed out".into());
+        }
+        if ready()? {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(15));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    #[ignore = "interactive focus/paste integration using two synthetic windows; changes clipboard"]
+    async fn native_focus_restore_and_paste_roundtrip() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        use windows::{
+            core::w,
+            Win32::{
+                Foundation::{LPARAM, WPARAM},
+                UI::{Input::KeyboardAndMouse::SetFocus, WindowsAndMessaging::*},
+            },
+        };
+        let done = Arc::new(AtomicBool::new(false));
+        let stop = done.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let fixture = std::thread::spawn(move || unsafe {
+            let _library =
+                windows::Win32::System::LibraryLoader::LoadLibraryW(w!("Msftedit.dll")).unwrap();
+            let source = CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                w!("STATIC"),
+                w!("Gogogadget source test"),
+                WS_OVERLAPPEDWINDOW,
+                40,
+                40,
+                500,
+                200,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let edit = CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                w!("RICHEDIT50W"),
+                w!("before ORIGINAL after"),
+                WS_CHILD | WS_VISIBLE | WINDOW_STYLE(4),
+                0,
+                0,
+                450,
+                120,
+                Some(source),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let launcher = CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                w!("STATIC"),
+                w!("Gogogadget launcher test"),
+                WS_OVERLAPPEDWINDOW,
+                600,
+                40,
+                300,
+                150,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let _ = ShowWindow(source, SW_SHOW);
+            let _ = SetForegroundWindow(source);
+            let _ = SetFocus(Some(edit));
+            SendMessageW(edit, 0x00b1, Some(WPARAM(7)), Some(LPARAM(15)));
+            tx.send((source.0 as usize, edit.0 as usize, launcher.0 as usize))
+                .unwrap();
+            let mut msg = MSG::default();
+            while !stop.load(Ordering::SeqCst) {
+                while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                    let _ = TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            let _ = DestroyWindow(launcher);
+            let _ = DestroyWindow(source);
+        });
+        let (source, edit, launcher) = rx.recv_timeout(Duration::from_secs(3)).unwrap();
+        let result = async {
+            unsafe {
+                let _ = SetForegroundWindow(HWND(source as *mut _));
+            }
+            wait_until(Instant::now() + Duration::from_secs(1), || {
+                Ok(unsafe { GetForegroundWindow() }.0 as usize == source)
+            })
+            .map_err(|_| "Test setup could not activate its source window".to_string())?;
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let selection = capture()
+                .await
+                .map_err(|e| format!("Initial test capture: {e}"))?;
+            if selection.text != "ORIGINAL" {
+                return Err(format!("Wrong test selection: {:?}", selection.text));
+            }
+            unsafe {
+                let _ = ShowWindow(HWND(launcher as *mut _), SW_SHOW);
+                let _ = SetForegroundWindow(HWND(launcher as *mut _));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            unsafe {
+                let _ = ShowWindow(HWND(launcher as *mut _), SW_HIDE);
+            }
+            replace(
+                selection.token.ok_or("No test token")?,
+                "Hé, dit is een test. 🙂".into(),
+                launcher,
+            )
+            .await?;
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let actual = unsafe {
+                let mut text = vec![0u16; 512];
+                let size = GetWindowTextW(HWND(edit as *mut _), &mut text) as usize;
+                String::from_utf16(&text[..size]).unwrap()
+            };
+            if actual != "before Hé, dit is een test. 🙂 after" {
+                return Err(format!("Wrong replacement: {actual:?}"));
+            }
+            if unsafe { GetForegroundWindow() }.0 as usize != source {
+                return Err("Source did not regain foreground".into());
+            }
+            // Equal text at a different position must still be refused.
+            unsafe {
+                SendMessageW(
+                    HWND(edit as *mut _),
+                    WM_SETTEXT,
+                    None,
+                    Some(LPARAM(w!("same same").as_ptr() as isize)),
+                );
+                SendMessageW(
+                    HWND(edit as *mut _),
+                    0x00b1,
+                    Some(WPARAM(0)),
+                    Some(LPARAM(4)),
+                );
+            }
+            let saved = capture().await?;
+            unsafe {
+                SendMessageW(
+                    HWND(edit as *mut _),
+                    0x00b1,
+                    Some(WPARAM(5)),
+                    Some(LPARAM(9)),
+                );
+            }
+            let refused = replace(
+                saved.token.ok_or("No second token")?,
+                "WRONG".into(),
+                launcher,
+            )
+            .await;
+            if !refused.is_err_and(|e| e.contains("different position")) {
+                return Err("A moved selection was not correctly refused".into());
+            }
+            let mut unchanged = vec![0u16; 30];
+            let size = unsafe { GetWindowTextW(HWND(edit as *mut _), &mut unchanged) } as usize;
+            if String::from_utf16(&unchanged[..size]).unwrap() != "same same" {
+                return Err("Refused replacement modified the source".into());
+            }
+            Ok::<(), String>(())
+        }
+        .await;
+        done.store(true, Ordering::SeqCst);
+        fixture.join().unwrap();
+        result.unwrap();
+    }
+    #[test]
+    fn waits_for_delayed_focus_but_never_accepts_expired_checks() {
+        let mut observations = 0;
+        wait_until(Instant::now() + Duration::from_secs(1), || {
+            observations += 1;
+            Ok(observations >= 3)
+        })
+        .unwrap();
+        assert_eq!(observations, 3);
+        assert!(wait_until(Instant::now(), || Ok(true)).is_err());
+        assert!(wait_until(Instant::now() + Duration::from_secs(1), || Err(
+            "Window closed".into()
+        ))
+        .is_err());
+    }
     #[test]
     #[ignore = "native clipboard integration; writes synthetic test text to the clipboard"]
     fn native_clipboard_paste_replaces_selected_text_exactly() {

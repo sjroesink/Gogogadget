@@ -102,3 +102,7 @@ De native adapter levert een tijdelijk doeltoken bij een enkelvoudige selectie. 
 ## Plakken als geheel (0.1.6)
 
 De Unicode-invoerbatch uit 0.1.5 is vervangen: het volledige antwoord gaat nu als CF_UNICODETEXT in een GMEM_MOVEABLE-blok naar het klembord, met de launcher als eigenaar. Na succesvolle SetClipboardData draagt de host het geheugen over aan Windows. Na sluiting van het klembord worden volgnummer en focus opnieuw gecontroleerd, waarna precies één Ctrl+V-shortcut wordt gestuurd. Het klembord wordt bewust niet onmiddellijk hersteld, zodat een asynchrone paste in de bronapp het antwoord kan blijven lezen. Gedeeltelijke shortcuts krijgen een best-effort key-up voor V en Ctrl, zonder de paste opnieuw te proberen. De bestaande selectie- en tokencontroles blijven gelden.
+
+## Focusoverdracht (0.1.7)
+
+De launcher verbergt zijn venster vóór de native vervangaanvraag. De worker wacht op foreground-activatie en laat de bronapp eerst zijn bestaande veldfocus herstellen; alleen indien nodig volgt UIA SetFocus. Geen AttachThreadInput of geforceerde selectieherstelling: de actuele geselecteerde inhoud en beide grenzen moeten nog overeenkomen. De deadline blijft gelden voor iedere fase. Readonly-informatie komt van de actuele TextPattern-range, met een ValuePattern-fallback; onbekende bewerkbaarheid blijft een expliciete weigering. Vervangfouten worden blijvend in het gesprek getoond in plaats van alleen als korte toast.

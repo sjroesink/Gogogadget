@@ -53,6 +53,10 @@ pub async fn replace_selection(
         .0 as usize;
     #[cfg(not(windows))]
     let owner = 0;
+    // Relinquish the always-on-top launcher before restoring the source app.
+    if let Some(window) = app.get_webview_window("main") {
+        window.hide().map_err(|e| e.to_string())?;
+    }
     let result = native::replace(token, text, owner).await;
     if result.is_ok() {
         if let Some(window) = app.get_webview_window("main") {
