@@ -26,6 +26,12 @@ Windows-apps tonen hun oorspronkelijke programma-icoon. Iconen worden pas opgeha
 
 Kies boven de resultaten **Best match**, **Most used** of **Name**. **Most used** sorteert de gevonden items op het aantal keer dat je ze vanuit de resultatenlijst hebt geopend. Dat aantal staat bij het item. De teller begint bij deze versie en wordt samen met de gekozen sortering lokaal bewaard. Openen buiten Gogogadget wordt niet bijgehouden; zoekopdrachten worden niet opgeslagen.
 
+## GitHub Releases
+
+De workflow **Release Windows** bouwt en publiceert automatisch bij het pushen van een versietag zoals `v0.1.8`. Een gewone branch-push maakt geen release. De tag moet overeenkomen met de versies in package.json, package-lock.json, src-tauri/Cargo.toml, src-tauri/Cargo.lock en src-tauri/tauri.conf.json; een afwijking stopt de workflow.
+
+Werk voor een volgende release die versies bij, commit en push de wijzigingen, en voer daarna bijvoorbeeld `git tag v0.1.9` en `git push origin v0.1.9` uit. De workflow draait tests en Clippy, bouwt op Windows en publiceert de losse executable, NSIS-installer en SHA256SUMS.txt. De release wordt pas zichtbaar nadat alle assets zijn geüpload. Een mislukte run kan via GitHub Actions opnieuw worden uitgevoerd. De binaries zijn nog niet met een Windows-codecertificaat ondertekend.
+
 ## Tekstacties
 
 Selecteer tekst of code in een andere app en druk op **Ctrl+Alt+T**. Controleer de selectie en kies **Translate with AI** of **Rewrite with AI**. Het resultaat verschijnt als een nieuw gesprek, met Markdown. **Replace selection** zet het antwoord na jouw klik terug in het oorspronkelijke tekstveld; **Copy response** blijft beschikbaar om zelf te plakken. Vervangen is beschikbaar voor één via de sneltoets opgehaalde selectie, zolang je die invoer niet handmatig hebt aangepast. De vertaalactie vertaalt standaard naar het Engels; wijzig de instructies om een andere doeltaal te kiezen.

@@ -1,0 +1,88 @@
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Check tag and package versions
+        run: node scripts/check-release-version.mjs
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Set up Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy --component rustfmt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup default stable
+
+      - name: Test frontend
+        run: npm test
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Lint Rust
+        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+      - name: Test native backend
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+
+      - name: Build Windows executable and installer
+        run: npm run desktop:build -- -- --locked
+
+      - name: Prepare release assets
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Path release-assets | Out-Null
+          Copy-Item -LiteralPath 'src-tauri/target/release/gogogadget.exe' -Destination "release-assets/Gogogadget-$version-windows-x64.exe"
+          Copy-Item -LiteralPath "src-tauri/target/release/bundle/nsis/Gogogadget_${version}_x64-setup.exe" -Destination "release-assets/Gogogadget-$version-windows-x64-setup.exe"
+          Get-ChildItem release-assets/*.exe | Sort-Object Name | ForEach-Object {
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          } | Set-Content release-assets/SHA256SUMS.txt -Encoding utf8
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $assets = @(Get-ChildItem release-assets -File | ForEach-Object { $_.FullName })
+          gh release view $env:RELEASE_TAG --json isDraft | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:RELEASE_TAG --verify-tag --draft --title "Gogogadget $env:RELEASE_TAG" --generate-notes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          gh release upload $env:RELEASE_TAG @assets --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release edit $env:RELEASE_TAG --draft=false
