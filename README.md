@@ -20,6 +20,12 @@ Open de app en gebruik **Ctrl+Alt+Space** om het venster te tonen of verbergen. 
 
 De app indexeert Windows Start-apps eenmaal op de achtergrond. Zoekopdrachten blijven lokaal. Je kunt de index handmatig vernieuwen. AI wordt alleen aangeroepen als je een vraag verstuurt; een webzoekactie opent je standaardbrowser.
 
+## App-iconen en gebruik
+
+Windows-apps tonen hun oorspronkelijke programma-icoon. Iconen worden pas opgehaald wanneer resultaten in beeld komen en worden tijdelijk gecachet; als Windows geen icoon levert, blijft het algemene app-icoon zichtbaar.
+
+Kies boven de resultaten **Best match**, **Most used** of **Name**. **Most used** sorteert de gevonden items op het aantal keer dat je ze vanuit de resultatenlijst hebt geopend. Dat aantal staat bij het item. De teller begint bij deze versie en wordt samen met de gekozen sortering lokaal bewaard. Openen buiten Gogogadget wordt niet bijgehouden; zoekopdrachten worden niet opgeslagen.
+
 ## Tekstacties
 
 Selecteer tekst of code in een andere app en druk op **Ctrl+Alt+T**. Controleer de selectie en kies **Translate with AI** of **Rewrite with AI**. Het resultaat verschijnt als een nieuw gesprek, met Markdown. **Replace selection** zet het antwoord na jouw klik terug in het oorspronkelijke tekstveld; **Copy response** blijft beschikbaar om zelf te plakken. Vervangen is beschikbaar voor één via de sneltoets opgehaalde selectie, zolang je die invoer niet handmatig hebt aangepast. De vertaalactie vertaalt standaard naar het Engels; wijzig de instructies om een andere doeltaal te kiezen.

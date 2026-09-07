@@ -1,4 +1,5 @@
 import type { Command } from "./types";
+import { usageKey, type Usage, type SortOrder } from "./usage";
 const normalize = (value: string) =>
   value
     .normalize("NFKD")
@@ -13,9 +14,17 @@ export class SearchIndex {
       text: normalize(`${command.title} ${command.keywords}`),
     }));
   }
-  search(query: string, limit = 40): Command[] {
+  search(
+    query: string,
+    limit = 40,
+    options: { order: SortOrder; usage: Usage } = {
+      order: "relevance",
+      usage: {},
+    },
+  ): Command[] {
     const words = normalize(query).trim().split(/\s+/).filter(Boolean);
-    if (!words.length) return this.rows.slice(0, limit).map((r) => r.command);
+    if (!words.length && options.order === "relevance")
+      return this.rows.slice(0, limit).map((r) => r.command);
     return this.rows
       .flatMap((row) => {
         let score = 0;
@@ -44,7 +53,12 @@ export class SearchIndex {
       })
       .sort(
         (a, b) =>
-          b.score - a.score || a.command.title.localeCompare(b.command.title),
+          (options.order === "most-used"
+            ? (options.usage[usageKey(b.command)] ?? 0) -
+              (options.usage[usageKey(a.command)] ?? 0)
+            : 0) ||
+          (options.order === "name" ? 0 : b.score - a.score) ||
+          a.command.title.localeCompare(b.command.title),
       )
       .slice(0, limit)
       .map((r) => r.command);

@@ -113,6 +113,8 @@ export function saveSettings(settings: Settings): Promise<void> {
 }
 export const listApps = (refresh = false) =>
   desktop ? invoke<AppEntry[]>("list_apps", { refresh }) : Promise.resolve([]);
+export const appIcon = (id: string) =>
+  desktop ? invoke<string | null>("app_icon", { id }) : Promise.resolve(null);
 export async function launchApp(id: string) {
   nativeOnly();
   await invoke("launch_app", { id });

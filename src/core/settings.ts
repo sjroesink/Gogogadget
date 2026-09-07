@@ -1,5 +1,6 @@
 import type { Settings, ProviderConfig } from "./types";
 import { defaultActions, parseActions } from "./actions";
+import { parseUsage } from "./usage";
 const base: ProviderConfig = {
   enabled: true,
   model: "",
@@ -10,6 +11,8 @@ const base: ProviderConfig = {
 };
 export const defaults = (): Settings => ({
   version: 1,
+  usage: {},
+  sortOrder: "relevance",
   actions: defaultActions(),
   selected: "codex",
   plugins: { "commands.essentials": true },
@@ -29,6 +32,9 @@ export function parseSettings(value: unknown): Settings {
   if (!value || typeof value !== "object") return result;
   const input = value as Partial<Settings>;
   if (input.version !== 1) throw new Error("Unknown settings version");
+  result.usage = parseUsage(input.usage);
+  if (input.sortOrder === "most-used" || input.sortOrder === "name")
+    result.sortOrder = input.sortOrder;
   if (input.actions !== undefined) result.actions = parseActions(input.actions);
   if (
     typeof input.selected === "string" &&

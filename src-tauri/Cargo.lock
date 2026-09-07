@@ -1439,9 +1439,11 @@ dependencies = [
 
 [[package]]
 name = "gogogadget"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
+ "base64 0.22.1",
  "futures-util",
+ "png 0.18.1",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

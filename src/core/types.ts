@@ -29,6 +29,8 @@ export interface ProviderConfig {
   cwd: string;
 }
 export interface Settings {
+  usage: import("./usage").Usage;
+  sortOrder: import("./usage").SortOrder;
   actions: import("./actions").TextAction[];
   version: 1;
   selected: string;

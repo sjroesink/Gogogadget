@@ -1,5 +1,7 @@
 import "./styles.css";
 import { Runtime } from "./core/runtime";
+import { recordUsage, usageKey, type SortOrder } from "./core/usage";
+import { observeAppIcons, disconnectAppIcons } from "./platform/app-icons";
 import { SearchIndex } from "./core/search";
 import { defaults } from "./core/settings";
 import {
@@ -312,6 +314,7 @@ async function refreshApps(refresh = false) {
   if (page === "launcher") renderResults();
 }
 function navigate(next: typeof page) {
+  disconnectAppIcons();
   if (next !== "actions") actionGeneration?.abort();
   if (next !== "settings") discovery?.abort();
   page = next;
@@ -347,7 +350,13 @@ function renderLauncher() {
       )
       .join(
         "",
-      )}<span class="local-label">${desktop ? "On your machine" : "Browser preview"}</span></nav><section class="results-area"><div class="section-label"><span id="result-heading">Suggestions</span><span id="result-count"></span></div><div id="results" role="listbox" aria-label="Search results"></div></section><div class="launcher-hint"><span><kbd>↑</kbd><kbd>↓</kbd> navigate <kbd>↵</kbd> open</span><span>Your tools. Your models.</span></div>`;
+      )}<span class="local-label">${desktop ? "On your machine" : "Browser preview"}</span></nav><section class="results-area"><div class="section-label"><span id="result-heading">Suggestions</span><span id="result-count"></span><select id="sort-order" aria-label="Sort results"><option value="relevance" ${settings.sortOrder === "relevance" ? "selected" : ""}>Best match</option><option value="most-used" ${settings.sortOrder === "most-used" ? "selected" : ""}>Most used</option><option value="name" ${settings.sortOrder === "name" ? "selected" : ""}>Name</option></select></div><div id="results" role="listbox" aria-label="Search results"></div></section><div class="launcher-hint"><span><kbd>↑</kbd><kbd>↓</kbd> navigate <kbd>↵</kbd> open</span><span>Your tools. Your models.</span></div>`;
+  $<HTMLSelectElement>("#sort-order").onchange = guarded(async () => {
+    settings.sortOrder = $<HTMLSelectElement>("#sort-order").value as SortOrder;
+    selection = 0;
+    renderResults();
+    await saveSettings(settings);
+  });
   const input = $<HTMLInputElement>("#query");
   input.oninput = () => {
     query = input.value;
@@ -366,7 +375,7 @@ function renderLauncher() {
     if (event.key === "Enter" && !event.isComposing) {
       event.preventDefault();
       const command = results[selection];
-      if (command) guarded(command.run)();
+      if (command) guarded(() => executeCommand(command))();
     }
   };
   $("#quick-ai").onclick = () => navigate("chat");
@@ -383,9 +392,18 @@ function renderLauncher() {
   renderResults();
   input.focus();
 }
+async function executeCommand(command: Command) {
+  await command.run();
+  settings.usage = recordUsage(settings.usage, command);
+  await saveSettings(settings);
+  if (page === "launcher") renderResults();
+}
 function renderResults() {
   const started = performance.now();
-  results = index.search(query);
+  results = index.search(query, 40, {
+    order: settings.sortOrder,
+    usage: settings.usage,
+  });
   searchMs = performance.now() - started;
   if (query.trim() && filter !== "apps") {
     const text = query.trim();
@@ -429,12 +447,15 @@ function renderResults() {
     ? results
         .map(
           (command, i) =>
-            `<button id="result-${i}" role="option" aria-selected="${i === selection}" class="result ${i === selection ? "selected" : ""}" data-index="${i}" tabindex="-1"><span class="command-icon ${command.kind === "ai" ? "lime" : ""}">${icon(command.icon)}</span><span class="result-text"><strong>${esc(command.title)}</strong><small>${esc(command.subtitle)}</small></span><span class="result-kind">${command.kind === "ai" ? "AI" : command.kind === "app" ? "Application" : "Command"}</span><span class="enter">↵</span></button>`,
+            `<button id="result-${i}" role="option" aria-selected="${i === selection}" class="result ${i === selection ? "selected" : ""}" data-index="${i}" tabindex="-1"><span class="command-icon ${command.kind === "ai" ? "lime" : ""}" ${command.kind === "app" ? `data-app-icon="${esc(command.id)}"` : ""}>${icon(command.icon)}</span><span class="result-text"><strong>${esc(command.title)}</strong><small>${esc(command.subtitle)}${settings.usage[usageKey(command)] ? ` · Opened ${settings.usage[usageKey(command)]} ${settings.usage[usageKey(command)] === 1 ? "time" : "times"}` : ""}</small></span><span class="result-kind">${command.kind === "ai" ? "AI" : command.kind === "app" ? "Application" : "Command"}</span><span class="enter">↵</span></button>`,
         )
         .join("")
     : `<div class="empty">${icon("search")}<strong>${!indexed ? "Your apps are loading" : "No apps found"}</strong><p>${desktop ? "Try another search term or refresh the app index." : "Open the desktop app to search your Windows apps."}</p></div>`;
+  observeAppIcons($(".results-area"));
   root.querySelectorAll<HTMLButtonElement>("[data-index]").forEach((button) => {
-    button.onclick = guarded(() => results[Number(button.dataset.index)].run());
+    button.onclick = guarded(() =>
+      executeCommand(results[Number(button.dataset.index)]),
+    );
   });
   $<HTMLInputElement>("#query").setAttribute(
     "aria-activedescendant",

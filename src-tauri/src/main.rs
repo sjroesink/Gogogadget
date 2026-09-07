@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod http;
+mod icons;
 mod platform;
 mod process;
 mod selection;
@@ -48,6 +49,7 @@ fn main() {
         .manage(process::Processes::default())
         .manage(http::Http::default())
         .manage(platform::AppIndex::default())
+        .manage(icons::Icons::default())
         .setup(|app| {
             app.global_shortcut().register("Ctrl+Alt+Space")?;
             app.global_shortcut().register("Ctrl+Alt+T")?;
@@ -92,6 +94,7 @@ fn main() {
             http::http_request,
             http::http_cancel,
             platform::list_apps,
+            icons::app_icon,
             platform::launch_app,
             platform::open_url,
             platform::load_settings,
