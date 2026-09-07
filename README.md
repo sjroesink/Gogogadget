@@ -1,81 +1,81 @@
 # Gogogadget
 
-Een kleine, toetsenbordgerichte AI-launcher voor Windows. Gebouwd met Tauri 2, Rust en TypeScript, met de systeem-WebView en zonder gebundelde Node- of Chromium-runtime. Node is alleen nodig tijdens ontwikkeling en eventueel voor een zelfgekozen agent.
+A small, keyboard-driven AI launcher for Windows. Built with Tauri 2, Rust and TypeScript, using the system WebView without bundling a Node or Chromium runtime. Node is only needed for development and, optionally, for an agent you choose to connect.
 
-## Starten
+## Getting started
 
-De gebouwde executable staat in `src-tauri/target/release/gogogadget.exe`. De NSIS-installer staat na `npm run desktop:build` in `src-tauri/target/release/bundle/nsis/`.
+The built executable is located at `src-tauri/target/release/gogogadget.exe`. After running `npm run desktop:build`, the NSIS installer is located in `src-tauri/target/release/bundle/nsis/`.
 
-Open de app en gebruik **Ctrl+Alt+Space** om het venster te tonen of verbergen. Het systeemvakmenu biedt Openen en Afsluiten. Sluiten met het kruisje laat de launcher actief. Er wordt geen automatisch opstartitem aangemaakt.
+Open the app and press **Ctrl+Alt+Space** to show or hide the window. The system tray menu offers **Open Gogogadget** and **Quit**. Closing the window with the close button keeps the launcher running. No startup entry is created automatically.
 
-| Toets | Actie |
+| Shortcut | Action |
 |---|---|
-| Ctrl+Alt+Space | Launcher tonen/verbergen, ook buiten de app |
-| Ctrl+Alt+T | Geselecteerde tekst ophalen en tekstacties openen |
-| ↑ / ↓, Enter | Resultaat kiezen en openen |
-| Ctrl+J | AI-gesprek |
-| Ctrl+, | Instellingen |
-| Enter / Shift+Enter | Vraag versturen / nieuwe regel |
-| Esc | Antwoord stoppen, terug, zoekveld wissen of verbergen |
+| Ctrl+Alt+Space | Show or hide the launcher, even from another app |
+| Ctrl+Alt+T | Capture selected text and open text actions |
+| ↑ / ↓, Enter | Select and open a result |
+| Ctrl+J | AI conversation |
+| Ctrl+, | Settings |
+| Enter / Shift+Enter | Send a prompt / insert a new line |
+| Esc | Stop a response, go back, clear the search field or hide the window |
 
-De app indexeert Windows Start-apps eenmaal op de achtergrond. Zoekopdrachten blijven lokaal. Je kunt de index handmatig vernieuwen. AI wordt alleen aangeroepen als je een vraag verstuurt; een webzoekactie opent je standaardbrowser.
+The app indexes Windows Start apps once in the background. Searches stay local. You can refresh the index manually. AI is only called when you submit a prompt; a web search action opens your default browser.
 
-## App-iconen en gebruik
+## App icons and usage
 
-Windows-apps tonen hun oorspronkelijke programma-icoon. Iconen worden pas opgehaald wanneer resultaten in beeld komen en worden tijdelijk gecachet; als Windows geen icoon levert, blijft het algemene app-icoon zichtbaar.
+Windows apps display their original program icons. Icons are fetched only when results come into view and are cached temporarily. If Windows cannot provide an icon, the generic app icon remains visible.
 
-Kies boven de resultaten **Best match**, **Most used** of **Name**. **Most used** sorteert de gevonden items op het aantal keer dat je ze vanuit de resultatenlijst hebt geopend. Dat aantal staat bij het item. De teller begint bij deze versie en wordt samen met de gekozen sortering lokaal bewaard. Openen buiten Gogogadget wordt niet bijgehouden; zoekopdrachten worden niet opgeslagen.
+Choose **Best match**, **Most used** or **Name** above the results. **Most used** sorts matching items by how often you have opened them from the results list. The count appears next to each item. Counting starts with version 0.1.8 and is saved locally along with your preferred sort order. Launches outside Gogogadget are not tracked, and search queries are not stored.
 
 ## GitHub Releases
 
-De workflow **Release Windows** bouwt en publiceert automatisch bij het pushen van een versietag zoals `v0.1.8`. Een gewone branch-push maakt geen release. De tag moet overeenkomen met de versies in package.json, package-lock.json, src-tauri/Cargo.toml, src-tauri/Cargo.lock en src-tauri/tauri.conf.json; een afwijking stopt de workflow.
+The **Release Windows** workflow automatically builds and publishes a release when you push a version tag such as `v0.1.8`. A regular branch push does not create a release. The tag must match the versions in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock` and `src-tauri/tauri.conf.json`; a mismatch stops the workflow.
 
-Werk voor een volgende release die versies bij, commit en push de wijzigingen, en voer daarna bijvoorbeeld `git tag v0.1.9` en `git push origin v0.1.9` uit. De workflow draait tests en Clippy, bouwt op Windows en publiceert de losse executable, NSIS-installer en SHA256SUMS.txt. De release wordt pas zichtbaar nadat alle assets zijn geüpload. Een mislukte run kan via GitHub Actions opnieuw worden uitgevoerd. De binaries zijn nog niet met een Windows-codecertificaat ondertekend.
+For the next release, update those versions, commit and push your changes, then run, for example, `git tag v0.1.9` and `git push origin v0.1.9`. The workflow runs tests and Clippy, builds on Windows and publishes the standalone executable, NSIS installer and `SHA256SUMS.txt`. The release is published only after all assets have been uploaded. Failed runs can be rerun through GitHub Actions. The binaries are not yet signed with a Windows code-signing certificate.
 
-## Tekstacties
+## Text actions
 
-Selecteer tekst of code in een andere app en druk op **Ctrl+Alt+T**. Controleer de selectie en kies **Translate with AI** of **Rewrite with AI**. Het resultaat verschijnt als een nieuw gesprek, met Markdown. **Replace selection** zet het antwoord na jouw klik terug in het oorspronkelijke tekstveld; **Copy response** blijft beschikbaar om zelf te plakken. Vervangen is beschikbaar voor één via de sneltoets opgehaalde selectie, zolang je die invoer niet handmatig hebt aangepast. De vertaalactie vertaalt standaard naar het Engels; wijzig de instructies om een andere doeltaal te kiezen.
+Select text or code in another app and press **Ctrl+Alt+T**. Review the selection and choose **Translate with AI** or **Rewrite with AI**. The result appears in a new conversation with Markdown rendering. Clicking **Replace selection** writes the response back into the original text field; **Copy response** remains available for manual pasting. Replacement is available for a selection captured through the shortcut, as long as you have not manually changed that input. The translation action defaults to English; edit its instructions to choose another target language.
 
-**Replace selection** controleert het oorspronkelijke veld, de tekst, beide selectiegrenzen en bewerkbaarheid voordat Windows tekstinvoer ontvangt. Een gewijzigde, verlopen of niet-bewerkbare selectie wordt geweigerd. Iedere poging verbruikt het doel, zodat je bij een fout opnieuw moet selecteren. Het antwoord wordt als volledige Unicode-tekst op het klembord gezet en met één Ctrl+V-opdracht geplakt, met behoud van eventuele Markdown-markeringen. Het antwoord blijft op het klembord staan, zodat je bij een fout zelf kunt plakken. Er wordt niet meer teken voor teken getypt.
+**Replace selection** checks the original field, text, both selection boundaries and editability before sending input to Windows. Changed, expired or non-editable selections are rejected. Each attempt consumes the replacement target, so you must select the text again after an error. The response is placed on the clipboard as complete Unicode text and pasted with a single Ctrl+V command, preserving any Markdown syntax. It stays on the clipboard so you can paste it manually if an error occurs. Text is no longer typed character by character.
 
-Via **Manage actions** kun je acties toevoegen, bewerken, uitschakelen en verwijderen. Een actie bestaat uit een unieke ID, titel, instructies en een enabled-vlag. De geselecteerde tekst wordt automatisch als invoer toegevoegd. Acties gebruiken de gekozen provider en het gekozen model; ze zijn geen uitvoerbare scripts. Ze worden lokaal in het `actions`-veld van `settings.json` opgeslagen. Bestaande installaties krijgen de twee beginacties; een bewust leeggemaakte lijst blijft leeg.
+Use **Manage actions** to add, edit, disable and delete actions. Each action has a unique ID, title, instructions and an enabled flag. Selected text is appended automatically as input. Actions use your selected provider and model; they are not executable scripts. They are stored locally in the `actions` field of `settings.json`. Existing installations receive the two default actions; a deliberately emptied list stays empty.
 
-Je kunt ook in **Ask AI** zeggen: “Voeg een actie toe waarmee ik geselecteerde tekst kan laten uitleggen met AI”, of in **Manage actions** beschrijven wat je wilt toevoegen, wijzigen of verwijderen. AI maakt een voorstel dat je kunt aanpassen en opslaan. Voor een verzoek dat niet automatisch herkend wordt, begin je met `/action`. Alleen direct ingevoerde beheeropdrachten openen deze route; geselecteerde tekst en AI-antwoorden kunnen zelf geen acties wijzigen.
+You can also ask **Ask AI** to “Add an action that explains selected text with AI”, or describe what you want to add, change or delete in **Manage actions**. AI produces a proposal that you can edit and save. If a request is not recognized automatically, start it with `/action`. Only directly entered management requests open this flow; selected text and AI responses cannot change actions on their own.
 
-Windows-selecties worden op aanvraag gelezen via UI Automation TextPattern, vóór de launcher focus krijgt. Bij het ophalen is er geen polling en wordt het klembord niet gelezen of overschreven. Wachtwoordvelden worden overgeslagen. Sommige apps en code-editors publiceren hun selectie niet via toegankelijkheid; kopieer en plak de tekst dan in het selectieveld. Vastlopende providers krijgen maximaal 1,5 seconde voordat het plakveld verschijnt; er kan hoogstens één uitleesworker tegelijk actief zijn. De selectie is begrensd tot 100.000 tekens en blijft alleen in geheugen, totdat een actie haar als chatinvoer gebruikt. macOS/Linux hebben voor deze functie nog een native adapter nodig.
+Windows selections are read on demand through UI Automation TextPattern, before the launcher takes focus. Capture does not poll or read or overwrite the clipboard. Password fields are skipped. Some apps and code editors do not expose their selection through accessibility APIs; in that case, copy and paste the text into the selection field. Stalled accessibility providers have up to 1.5 seconds before the paste field appears, with at most one capture worker active at a time. Selections are limited to 100,000 characters and remain in memory until an action uses them as chat input. macOS and Linux still need a native adapter for this feature.
 
-## Providers instellen
+## Configuring providers
 
-Open **Instellingen**, kies een provider, vul het model in of gebruik **Ophalen**, en klik **Opslaan**. Nieuwe installaties gebruiken standaard Codex met `gpt-5.6-terra`. **Gebruik als mijn AI-provider** bepaalt de actieve provider. Providers kunnen afzonderlijk aan en uit bij **Plugins**.
+Open **Settings**, choose a provider, enter a model or use **Fetch**, then click **Save**. New installations default to Codex with `gpt-5.6-terra`. **Use as my AI provider** selects the active provider. Providers can be enabled and disabled individually under **Plugins**.
 
 ### Ollama
 
-Start een bestaande Ollama-installatie. Het standaardadres is `http://127.0.0.1:11434`. Download zelf een model met de Ollama CLI, haal de modellijst op en selecteer een model. Er is geen ingebouwd standaardmodel of automatische modeldownload. De plugin gebruikt `/api/tags` en streaming `/api/chat`. Lokale HTTP en HTTPS-endpoints worden ondersteund; remote HTTP en redirects worden geweigerd. Cloud-API-key-authenticatie is nog niet ingebouwd.
+Start an existing Ollama installation. The default address is `http://127.0.0.1:11434`. Download a model yourself using the Ollama CLI, fetch the model list and select a model. There is no built-in default model or automatic model download. The plugin uses `/api/tags` and streaming `/api/chat`. Local HTTP and HTTPS endpoints are supported; remote HTTP and redirects are rejected. Cloud API key authentication is not implemented yet.
 
 ### Codex
 
-Installeer de Codex CLI en log in met `codex login`. Instellingen: programma `codex`, argumenten `["app-server"]`. Op Windows wordt de officiële npm-shim rechtstreeks naar zijn Node-entrypoint vertaald; prompttekst wordt nooit als shellcommando uitgevoerd. Je kunt ook een volledig pad naar `codex.exe` instellen.
+Install the Codex CLI and sign in with `codex login`. Configure the executable as `codex` and arguments as `["app-server"]`. On Windows, the official npm shim is resolved directly to its Node entry point; prompt text is never executed as a shell command. You can also configure a full path to `codex.exe`.
 
-De plugin gebruikt `initialize`, `initialized`, `model/list`, `thread/start`, `turn/start` en streaming notifications. Een leeg modelveld gebruikt de standaard van de agent. Taken krijgen een `read-only` sandbox, `approvalPolicy: never` en een tijdelijke thread. De standaardwerkmap is een aparte Gogogadget-map; een eigen werkmap is optioneel.
+The plugin uses `initialize`, `initialized`, `model/list`, `thread/start`, `turn/start` and streaming notifications. An empty model field uses the agent's default. Tasks use a `read-only` sandbox, `approvalPolicy: never` and an ephemeral thread. The default working directory is a separate Gogogadget folder; a custom working directory is optional.
 
 ### ACP — Agent Client Protocol
 
-Installeer en authenticeer eerst een ACP-compatibele agent. Vul het native programma in en de argumenten als JSON-array. Voor een JavaScript-agent: programma `node` en argumenten zoals `["C:/pad/naar/agent.js", "--acp"]`, aangepast aan die agent. `.cmd` en `.bat` worden niet via een shell uitgevoerd. De werkmap moet bestaan als je er zelf een invult.
+First install and authenticate an ACP-compatible agent. Enter its native executable and arguments as a JSON array. For a JavaScript agent, use executable `node` and arguments such as `["C:/path/to/agent.js", "--acp"]`, adjusted for that agent. `.cmd` and `.bat` files are not executed through a shell. If you specify a working directory, it must exist.
 
-ACP v1 over newline-delimited JSON-RPC/stdio wordt ondersteund: initialisatie, nieuwe sessies, prompt-streams en modelkeuze via `configOptions` met categorie `model`, met fallback naar de oudere `models`-interface. Niet iedere ACP-agent publiceert modellen; laat in dat geval het modelveld leeg. Authenticatie, filesystem- en terminalcallbacks worden niet door deze client aangeboden. Toestemmingsverzoeken worden met annulering beantwoord. Een ACP-agent is een lokaal programma met zijn eigen mogelijkheden en is geen sandbox van Gogogadget.
+ACP v1 over newline-delimited JSON-RPC/stdio is supported: initialization, new sessions, prompt streams and model selection through `configOptions` with category `model`, falling back to the older `models` interface. Not every ACP agent publishes a model list; leave the model field empty in that case. This client does not provide authentication, filesystem or terminal callbacks. Permission requests are answered with cancellation. An ACP agent is a local program with its own capabilities, not a Gogogadget sandbox.
 
-Agentprocessen starten per modelopvraag of vraag en sluiten daarna. Op Windows houdt een Job Object de procesboom bij. Annuleren sluit de verbinding en beëindigt de beheerde procesboom. Ollama's externe server blijft draaien; het model krijgt een keep-alive van 60 seconden.
+Agent processes start for each model lookup or prompt and shut down afterward. On Windows, a Job Object tracks the process tree. Cancellation closes the connection and terminates the managed process tree. Ollama's external server keeps running, with a model keep-alive of 60 seconds.
 
-## Ontwikkeling
+## Development
 
-Vereisten: Windows 10/11, WebView2 Runtime, Node.js 22.12+, Rust stable en Visual Studio Build Tools met Desktop development with C++. De lockfiles zijn onderdeel van het project.
+Requirements: Windows 10/11, WebView2 Runtime, Node.js 22.12+, stable Rust and Visual Studio Build Tools with Desktop development with C++. Lockfiles are included in the repository.
 
 ```powershell
 npm ci
 npm run desktop
 ```
 
-Alleen de interface bekijken: `npm run dev`, open `http://127.0.0.1:1420`. De browserpreview toont geen verzonnen apps of AI-antwoorden; native mogelijkheden werken uitsluitend in de desktop-app. Preview-instellingen en desktop-instellingen staan los van elkaar.
+To preview just the interface, run `npm run dev` and open `http://127.0.0.1:1420`. The browser preview does not show fabricated apps or AI responses; native capabilities only work in the desktop app. Preview settings and desktop settings are separate.
 
 ```powershell
 npm test
@@ -86,31 +86,31 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 npm run desktop:build
 ```
 
-De gewone tests gebruiken protocolfixtures en lokale transports. De optionele native live-tests lezen modellen bij reeds geïnstalleerde Codex/Ollama en starten een tijdelijke Codex-thread zonder inferentie:
+Regular tests use protocol fixtures and local transports. Optional native live tests query models from installed Codex/Ollama instances and start an ephemeral Codex thread without inference:
 
 ```powershell
 cargo test --manifest-path src-tauri/Cargo.toml installed_ -- --ignored --nocapture
 ```
 
-Voor een expliciete live-inferentietest kun je daarnaast `GOGOGADGET_LIVE_COMPLETION=1` zetten en met `GOGOGADGET_TEST_MODEL` een model uit je Codex-catalogus kiezen. Dat verstuurt één korte testprompt. CLI-versie en account moeten dat model ondersteunen; een modellijst alleen garandeert dat niet.
+For an explicit live inference test, also set `GOGOGADGET_LIVE_COMPLETION=1` and use `GOGOGADGET_TEST_MODEL` to choose a model from your Codex catalog. This sends one short test prompt. Both the CLI version and your account must support the model; its presence in the model list alone does not guarantee this.
 
-`.npmrc` gebruikt `legacy-peer-deps` vanwege een npm 10-resolverfout bij optionele Vitest-browserpeers. Er worden geen browser-testadapters gebruikt.
+`.npmrc` uses `legacy-peer-deps` because of an npm 10 resolver issue with optional Vitest browser peers. No browser test adapters are used.
 
 ## Composability
 
-De runtime is geïnspireerd op [A Programming Paradigm for Spatiotemporal Composability](https://arxiv.org/abs/2608.25512). Plugins declareren `requires` en `provides`, krijgen een eigen context en registreren opruimfuncties voor hun effecten. Afhankelijke plugins activeren opnieuw wanneer hun services terugkomen. Bij uitschakelen verdwijnen eerst de consumers, daarna de provider; opruiming wordt afgewacht, ook bij gedeeltelijk mislukte activatie.
+The runtime is inspired by [A Programming Paradigm for Spatiotemporal Composability](https://arxiv.org/abs/2608.25512). Plugins declare `requires` and `provides`, receive their own context and register cleanup functions for their effects. Dependent plugins reactivate when their services become available again. When disabling a provider, consumers are removed first, then the provider. Cleanup is awaited, including after partially failed activation.
 
-Dit is een afgebakende implementatie van de principes, geen implementatie van de volledige Cordis-calculus of formeel bewijs van de paper. Opruiming geldt voor de geregistreerde runtime-effecten. Het starten van een app, een verstuurd AI-verzoek of wijzigingen door externe agents zijn geen terugdraaibare runtime-effecten. Meer details en een voorbeeld: [pluginarchitectuur](docs/architecture.md).
+This is a limited implementation of the principles, not an implementation of the full Cordis calculus or a formal proof of the paper. Cleanup applies to registered runtime effects. Launching an app, sending an AI request or changes made by external agents are not reversible runtime effects. See the [plugin architecture](docs/architecture.md) for details and an example.
 
-## Status van deze eerste versie
+## Current status
 
-- Windows: native venster, systeemvak, single-instance, globale sneltoets, Start-appindex en starten van apps.
-- Providers: drie ingebouwde plugins; laden op aanvraag, configureerbare modellen, streamen, annuleren, fout- en timeoutafhandeling.
-- Plugins: broncodemodules die runtime kunnen worden uitgeschakeld; een externe pluginwinkel, pakketinstallatie en een sandbox voor onbetrouwbare plugins zijn nog niet gebouwd.
-- Chat: Markdown-weergave met links, lijsten, tabellen en codeblokken, kopiëren en een nieuw gesprek. De interface gebruikt grijstinten. Maximaal 40 berichten blijven in geheugen; maximaal 20 gaan mee in een nieuwe vraag. Geen persistente gespreksgeschiedenis. Agents kunnen zelf gegevens bewaren volgens hun eigen configuratie.
-- Portabiliteit: frontend, runtime en providerlogica zijn platformonafhankelijk. macOS/Linux-appindexering en procesboomopruiming moeten nog worden toegevoegd en getest; alleen Windows is nu een ondersteund doelplatform.
-- De installer is niet code-ondertekend. Automatische updates, autostart, bestanden zoeken en clipboardgeschiedenis vallen buiten deze eerste versie.
+- Windows: native window, system tray, single instance, global shortcut, Start app index and app launching.
+- Providers: three built-in plugins with loading on demand, configurable models, streaming, cancellation, error handling and timeouts.
+- Plugins: source modules that can be disabled at runtime. An external plugin store, package installation and a sandbox for untrusted plugins have not been built yet.
+- Chat: Markdown rendering with links, lists, tables and code blocks, response copying and starting a new conversation. The interface uses grayscale colors. Up to 40 messages remain in memory, with up to 20 included in a new prompt. There is no persistent conversation history. Agents may retain data according to their own configuration.
+- Portability: the frontend, runtime and provider logic are platform independent. App indexing and process tree cleanup for macOS/Linux still need to be added and tested; Windows is currently the only supported target.
+- The installer is not code-signed. Automatic updates, launching at startup, file search and clipboard history are outside the scope of this initial version.
 
-Meetresultaten en de exacte verificatiegrenzen staan in [validation.md](docs/validation.md).
+Measurements and exact verification limits are documented in [validation.md](docs/validation.md).
 
-Bronnen voor de protocollen: [Codex App Server](https://learn.chatgpt.com/docs/app-server), [ACP initialization](https://agentclientprotocol.com/protocol/v1/initialization), [ACP config options](https://agentclientprotocol.com/protocol/v1/session-config-options), [Ollama chat API](https://docs.ollama.com/api/chat), [Tauri](https://v2.tauri.app/start/).
+Protocol references: [Codex App Server](https://learn.chatgpt.com/docs/app-server), [ACP initialization](https://agentclientprotocol.com/protocol/v1/initialization), [ACP config options](https://agentclientprotocol.com/protocol/v1/session-config-options), [Ollama chat API](https://docs.ollama.com/api/chat), [Tauri](https://v2.tauri.app/start/).
