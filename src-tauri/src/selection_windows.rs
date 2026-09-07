@@ -5,10 +5,17 @@ use std::{
 };
 use tokio::sync::oneshot;
 use windows::Win32::{
-    Foundation::HWND,
+    Foundation::{GlobalFree, HANDLE, HWND},
     System::Com::{
         CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
         COINIT_MULTITHREADED,
+    },
+    System::{
+        DataExchange::{
+            CloseClipboard, EmptyClipboard, GetClipboardSequenceNumber, OpenClipboard,
+            SetClipboardData,
+        },
+        Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE},
     },
     UI::{
         Accessibility::{
@@ -18,14 +25,20 @@ use windows::Win32::{
         },
         Input::KeyboardAndMouse::{
             GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-            KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+            KEYEVENTF_KEYUP, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT, VK_V,
         },
         WindowsAndMessaging::{GetForegroundWindow, IsWindow, SetForegroundWindow},
     },
 };
 enum Request {
     Capture(Instant, oneshot::Sender<Result<Snapshot, String>>),
-    Replace(String, String, Instant, oneshot::Sender<Result<(), String>>),
+    Replace(
+        String,
+        String,
+        usize,
+        Instant,
+        oneshot::Sender<Result<(), String>>,
+    ),
 }
 struct Target {
     token: String,
@@ -34,7 +47,7 @@ struct Target {
     range: IUIAutomationTextRange,
     text: String,
 }
-// UIA objects remain on this lazily started COM worker. No polling or clipboard access.
+// UIA objects remain on this lazily started COM worker. No polling. Clipboard writes happen only on explicit replacement.
 fn worker() -> &'static mpsc::SyncSender<Request> {
     static WORKER: OnceLock<mpsc::SyncSender<Request>> = OnceLock::new();
     WORKER.get_or_init(|| {
@@ -63,7 +76,7 @@ fn worker() -> &'static mpsc::SyncSender<Request> {
                             }
                         }
                     }
-                    Request::Replace(token, text, deadline, reply) => {
+                    Request::Replace(token, text, owner, deadline, reply) => {
                         // Consume before input: a partial/uncertain insertion must never be retried.
                         let saved = target.take();
                         let result = saved
@@ -72,7 +85,7 @@ fn worker() -> &'static mpsc::SyncSender<Request> {
                                 "This selection has expired. Select the text again with Ctrl+Alt+T."
                                     .to_string()
                             })
-                            .and_then(|t| replace_now(&t, &text, deadline));
+                            .and_then(|t| replace_now(&t, &text, HWND(owner as *mut _), deadline));
                         let _ = reply.send(result);
                     }
                 }
@@ -98,12 +111,13 @@ pub async fn capture() -> Result<Snapshot, String> {
         .map_err(|_| "Selection capture timed out. Copy and paste your text here.".to_string())?
         .map_err(|_| "Selection worker stopped.".to_string())?
 }
-pub async fn replace(token: String, text: String) -> Result<(), String> {
+pub async fn replace(token: String, text: String, owner: usize) -> Result<(), String> {
     let (tx, rx) = oneshot::channel();
     worker()
         .try_send(Request::Replace(
             token,
             text,
+            owner,
             Instant::now() + Duration::from_secs(3),
             tx,
         ))
@@ -193,7 +207,12 @@ unsafe fn capture_now(
     }
     Ok((snapshot, target))
 }
-unsafe fn replace_now(target: &Target, text: &str, deadline: Instant) -> Result<(), String> {
+unsafe fn replace_now(
+    target: &Target,
+    text: &str,
+    owner: HWND,
+    deadline: Instant,
+) -> Result<(), String> {
     let inspect = || -> windows::core::Result<bool> {
         if !IsWindow(Some(target.window)).as_bool()
             || target.element.CurrentIsPassword()?.as_bool()
@@ -233,22 +252,7 @@ unsafe fn replace_now(target: &Target, text: &str, deadline: Instant) -> Result<
     if !inspect().map_err(|_| "The original text field is no longer available.".to_string())? {
         return Err("The selection changed or the field is not editable. Select the text again, or use Copy response.".into());
     }
-    let normalized = text.replace("\r\n", "\n").replace('\n', "\r");
-    let mut inputs = Vec::with_capacity(normalized.len() * 2);
-    for ch in normalized.encode_utf16() {
-        for flags in [KEYEVENTF_UNICODE, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP] {
-            inputs.push(INPUT {
-                r#type: INPUT_KEYBOARD,
-                Anonymous: INPUT_0 {
-                    ki: KEYBDINPUT {
-                        wScan: ch,
-                        dwFlags: flags,
-                        ..Default::default()
-                    },
-                },
-            });
-        }
-    }
+    let inputs = paste_inputs();
     if Instant::now() > deadline
         || GetForegroundWindow() != target.window
         || !target
@@ -265,9 +269,179 @@ unsafe fn replace_now(target: &Target, text: &str, deadline: Instant) -> Result<
     {
         return Err("Release modifier keys and select the text again.".into());
     }
+    let clipboard_sequence = write_clipboard(owner, text)
+        .map_err(|e| format!("Could not prepare the clipboard: {e}"))?;
+    if Instant::now() > deadline
+        || GetForegroundWindow() != target.window
+        || !target
+            .element
+            .CurrentHasKeyboardFocus()
+            .map_err(|e| e.to_string())?
+            .as_bool()
+        || GetClipboardSequenceNumber() != clipboard_sequence
+    {
+        return Err(
+            "Focus or clipboard changed. The response is on the clipboard; paste it manually."
+                .into(),
+        );
+    }
     let sent = SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
     if sent != inputs.len() as u32 {
+        // A partial shortcut must not leave Ctrl or V held down.
+        let _ = SendInput(&inputs[2..], std::mem::size_of::<INPUT>() as i32);
         return Err("Windows did not accept the full replacement. Check the original field before trying again.".into());
     }
     Ok(())
+}
+
+// One paste command, independent of response length. No per-character VK_PACKET events.
+fn paste_inputs() -> [INPUT; 4] {
+    [
+        (VK_CONTROL, false),
+        (VK_V, false),
+        (VK_V, true),
+        (VK_CONTROL, true),
+    ]
+    .map(|(key, up)| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: key,
+                dwFlags: if up {
+                    KEYEVENTF_KEYUP
+                } else {
+                    Default::default()
+                },
+                ..Default::default()
+            },
+        },
+    })
+}
+fn clipboard_text(text: &str) -> Vec<u16> {
+    text.replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .replace('\n', "\r\n")
+        .encode_utf16()
+        .chain(Some(0))
+        .collect()
+}
+unsafe fn write_clipboard(owner: HWND, text: &str) -> windows::core::Result<u32> {
+    let text = clipboard_text(text);
+    let memory = GlobalAlloc(GMEM_MOVEABLE, text.len() * 2)?;
+    let result = (|| {
+        let pointer = GlobalLock(memory);
+        if pointer.is_null() {
+            return Err(windows::core::Error::from_win32());
+        }
+        std::ptr::copy_nonoverlapping(text.as_ptr(), pointer.cast::<u16>(), text.len());
+        let _ = GlobalUnlock(memory);
+        OpenClipboard(Some(owner))?;
+        struct Clipboard;
+        impl Drop for Clipboard {
+            fn drop(&mut self) {
+                unsafe {
+                    let _ = CloseClipboard();
+                }
+            }
+        }
+        let _clipboard = Clipboard;
+        EmptyClipboard()?;
+        SetClipboardData(13, Some(HANDLE(memory.0)))?; // CF_UNICODETEXT; ownership transfers to Windows.
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = GlobalFree(Some(memory));
+    }
+    result.map(|_| GetClipboardSequenceNumber())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    #[ignore = "native clipboard integration; writes synthetic test text to the clipboard"]
+    fn native_clipboard_paste_replaces_selected_text_exactly() {
+        use windows::{
+            core::w,
+            Win32::{
+                Foundation::{LPARAM, WPARAM},
+                UI::WindowsAndMessaging::*,
+            },
+        };
+        unsafe {
+            let owner = CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                w!("STATIC"),
+                w!("Gogogadget paste test"),
+                WINDOW_STYLE(0),
+                0,
+                0,
+                0,
+                0,
+                Some(HWND_MESSAGE),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            struct Window(HWND);
+            impl Drop for Window {
+                fn drop(&mut self) {
+                    unsafe {
+                        let _ = DestroyWindow(self.0);
+                    }
+                }
+            }
+            let _owner = Window(owner);
+            let edit = CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                w!("EDIT"),
+                w!("before ORIGINAL after"),
+                WS_CHILD | WINDOW_STYLE(0x0004),
+                0,
+                0,
+                500,
+                100,
+                Some(owner),
+                None,
+                None,
+                None,
+            )
+            .unwrap(); // ES_MULTILINE
+            let _edit = Window(edit);
+            let text = "Hey, dit is een test. hé🙂\n\tconst answer = 42;";
+            let sequence = write_clipboard(owner, text).unwrap();
+            assert_eq!(sequence, GetClipboardSequenceNumber());
+            SendMessageW(edit, 0x00b1, Some(WPARAM(7)), Some(LPARAM(15))); // EM_SETSEL: ORIGINAL
+            SendMessageW(edit, WM_PASTE, None, None);
+            let mut result = vec![0u16; GetWindowTextLengthW(edit) as usize + 1];
+            let length = GetWindowTextW(edit, &mut result) as usize;
+            assert_eq!(
+                String::from_utf16(&result[..length]).unwrap(),
+                "before Hey, dit is een test. hé🙂\r\n\tconst answer = 42; after"
+            );
+        }
+    }
+    #[test]
+    fn paste_uses_one_shortcut_instead_of_character_events() {
+        let inputs = paste_inputs();
+        assert_eq!(inputs.len(), 4);
+        unsafe {
+            assert_eq!(inputs[0].Anonymous.ki.wVk, VK_CONTROL);
+            assert_eq!(inputs[1].Anonymous.ki.wVk, VK_V);
+            assert_eq!(inputs[2].Anonymous.ki.dwFlags, KEYEVENTF_KEYUP);
+            assert_eq!(inputs[3].Anonymous.ki.wVk, VK_CONTROL);
+            assert_eq!(inputs[3].Anonymous.ki.dwFlags, KEYEVENTF_KEYUP);
+            assert!(inputs.iter().all(|i| i.Anonymous.ki.wScan == 0));
+        }
+    }
+    #[test]
+    fn clipboard_keeps_full_unicode_text_tabs_and_line_breaks() {
+        let text = "Hey, dit is een test. hé🙂\n\tcode\r\nnext";
+        let wide = clipboard_text(text);
+        assert_eq!(wide.last(), Some(&0));
+        assert_eq!(
+            String::from_utf16(&wide[..wide.len() - 1]).unwrap(),
+            "Hey, dit is een test. hé🙂\r\n\tcode\r\nnext"
+        );
+    }
 }

@@ -53,3 +53,9 @@ De optionele live-actietest is te starten door `GOGOGADGET_ACTION_CODEX_EXE` in 
 ## Replace selection 0.1.5
 
 De chat heeft nu Replace selection naast Copy response voor antwoorden op een native opgehaalde selectie. 28 TypeScript-tests en 6 gewone native tests zijn geslaagd; de optionele live-tests zijn overgeslagen. De nieuwe tests controleren exacte token/tekstoverdracht, foutpropagatie zonder retry en afwijzen van lege, te grote of control-character-invoer. TypeScript strict, Clippy en de Windows-releasebuild/NSIS-installer zijn geslaagd. De gebruiker heeft selectie-ophalen in 0.1.4 getoond; daadwerkelijk terugschrijven via SendInput is in deze testomgeving nog niet end-to-end geverifieerd. Controleer bij handmatige acceptatie ook een gewijzigde selectie, een gesloten bronvenster en Unicode/multiline-invoer in de beoogde editor.
+
+## Plakreparatie 0.1.6
+
+De gebruiker zag verminkte tekst na de Unicode-toetsenbatch in 0.1.5. De vervanging gebruikt nu CF_UNICODETEXT en één Ctrl+V-shortcut; het antwoord blijft op het klembord staan. De native integratietest `native_clipboard_paste_replaces_selected_text_exactly` is geslaagd: een geïsoleerd Win32 EDIT-veld plakte de volledige tekst met accenten, emoji, tabs en CRLF op alleen de geselecteerde positie, met behoud van tekst ervoor en erna. Deze test gebruikt WM_PASTE om de daadwerkelijke klembordoverdracht en tekstvervanging te verifiëren; de volledige focus-/Ctrl+V-route in Kladblok blijft apart handmatig te verifiëren. Twee regressietests controleren de shortcut-events en UTF-16/CRLF-inhoud. Rust Clippy en TypeScript strict zijn geslaagd.
+
+De native integratietest is opt-in en schrijft synthetische testtekst naar het Windows-klembord. Uitvoeren: `cargo test --manifest-path src-tauri/Cargo.toml native_clipboard_paste_replaces_selected_text_exactly -- --ignored --nocapture`.

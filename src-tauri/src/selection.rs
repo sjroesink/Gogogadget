@@ -44,7 +44,16 @@ pub async fn replace_selection(
         return Err("Selection is busy. Please try again.".into());
     }
     let _busy = Busy;
-    let result = native::replace(token, text).await;
+    #[cfg(windows)]
+    let owner = app
+        .get_webview_window("main")
+        .ok_or("Launcher window is unavailable")?
+        .hwnd()
+        .map_err(|e| e.to_string())?
+        .0 as usize;
+    #[cfg(not(windows))]
+    let owner = 0;
+    let result = native::replace(token, text, owner).await;
     if result.is_ok() {
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.hide();
@@ -75,7 +84,7 @@ mod native {
     pub async fn capture() -> Result<Snapshot, String> {
         Err("Selection capture is currently available on Windows. Paste your text here.".into())
     }
-    pub async fn replace(_: String, _: String) -> Result<(), String> {
+    pub async fn replace(_: String, _: String, _: usize) -> Result<(), String> {
         Err("Replacing selections is currently available on Windows.".into())
     }
 }
