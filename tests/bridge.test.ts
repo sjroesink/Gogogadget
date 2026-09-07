@@ -7,8 +7,25 @@ vi.mock("@tauri-apps/api/core", () => ({
     onmessage = (_: unknown) => {};
   },
 }));
-import { host } from "../src/platform/bridge";
-beforeEach(() => mock.invoke.mockReset());
+import { host, replaceSelection } from "../src/platform/bridge";
+beforeEach(() => {
+  mock.invoke.mockReset();
+});
+it("sends a captured target token and exact replacement text to the native host", async () => {
+  const text = "hé🙂\n\tconst value = 1;";
+  await replaceSelection("selection-7", text);
+  expect(mock.invoke).toHaveBeenCalledWith("replace_selection", {
+    token: "selection-7",
+    text,
+  });
+});
+it("surfaces replacement refusal without retrying input", async () => {
+  mock.invoke.mockRejectedValue(new Error("Selection changed"));
+  await expect(replaceSelection("expired", "new text")).rejects.toThrow(
+    "Selection changed",
+  );
+  expect(mock.invoke).toHaveBeenCalledTimes(1);
+});
 it("waits for ordered channel completion even when the native command returns first", async () => {
   let deliver: (() => void) | undefined;
   mock.invoke.mockImplementation(async (method, args) => {

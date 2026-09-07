@@ -22,7 +22,9 @@ De app indexeert Windows Start-apps eenmaal op de achtergrond. Zoekopdrachten bl
 
 ## Tekstacties
 
-Selecteer tekst of code in een andere app en druk op **Ctrl+Alt+T**. Controleer de selectie en kies **Translate with AI** of **Rewrite with AI**. Het resultaat verschijnt als een nieuw gesprek, met Markdown en **Copy response** om het terug te plakken. Er wordt niets automatisch in het oorspronkelijke tekstveld vervangen. De vertaalactie vertaalt standaard naar het Engels; wijzig de instructies om een andere doeltaal te kiezen.
+Selecteer tekst of code in een andere app en druk op **Ctrl+Alt+T**. Controleer de selectie en kies **Translate with AI** of **Rewrite with AI**. Het resultaat verschijnt als een nieuw gesprek, met Markdown. **Replace selection** zet het antwoord na jouw klik terug in het oorspronkelijke tekstveld; **Copy response** blijft beschikbaar om zelf te plakken. Vervangen is beschikbaar voor één via de sneltoets opgehaalde selectie, zolang je die invoer niet handmatig hebt aangepast. De vertaalactie vertaalt standaard naar het Engels; wijzig de instructies om een andere doeltaal te kiezen.
+
+**Replace selection** controleert het oorspronkelijke veld, de tekst, beide selectiegrenzen en bewerkbaarheid voordat Windows tekstinvoer ontvangt. Een gewijzigde, verlopen of niet-bewerkbare selectie wordt geweigerd. Iedere poging verbruikt het doel, zodat je bij een fout opnieuw moet selecteren. Het antwoord wordt als tekst ingevoerd, met behoud van eventuele Markdown-markeringen, zonder het klembord te veranderen. Ondersteuning van Unicode-invoer, tabs en nieuwe regels hangt af van de bronapp.
 
 Via **Manage actions** kun je acties toevoegen, bewerken, uitschakelen en verwijderen. Een actie bestaat uit een unieke ID, titel, instructies en een enabled-vlag. De geselecteerde tekst wordt automatisch als invoer toegevoegd. Acties gebruiken de gekozen provider en het gekozen model; ze zijn geen uitvoerbare scripts. Ze worden lokaal in het `actions`-veld van `settings.json` opgeslagen. Bestaande installaties krijgen de twee beginacties; een bewust leeggemaakte lijst blijft leeg.
 

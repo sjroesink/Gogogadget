@@ -1222,3 +1222,8 @@ h2 {
 #selection-count {
   color: #999999;
 }
+.response-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

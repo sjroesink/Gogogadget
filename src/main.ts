@@ -31,6 +31,7 @@ import {
   hide,
   onFocus,
   onSelection,
+  replaceSelection,
   drag,
   quit,
 } from "./platform/bridge";
@@ -77,6 +78,9 @@ let runtime = new Runtime();
 let apps: AppEntry[] = [];
 let page: "launcher" | "chat" | "plugins" | "settings" | "actions" = "launcher";
 let selectedText = "";
+let selectionToken: string | undefined;
+let replacementToken: string | undefined;
+let replacing = false;
 let selectionError = "";
 let managingActions = false;
 let editingAction = "";
@@ -548,6 +552,7 @@ function renderSettings() {
       if (selected) {
         if (settings.selected !== configured) {
           conversationEpoch++;
+          replacementToken = undefined;
           conversation = [];
         }
         settings.selected = configured;
@@ -613,12 +618,13 @@ async function persistActions(next: TextAction[]) {
   }
 }
 async function runTextAction(action: TextAction) {
-  if (active)
+  if (active || replacing)
     throw new Error("Stop the current response before running a text action.");
   const prompt = actionPrompt(action, selectedText);
   provider();
   conversationEpoch++;
   conversation = [];
+  replacementToken = selectionToken;
   response = "";
   chatError = "";
   navigate("chat");
@@ -663,6 +669,7 @@ function renderActions() {
     "Text actions · your prompts, your AI provider";
   if (!managingActions) {
     $<HTMLTextAreaElement>("#selected-text").oninput = (event) => {
+      selectionToken = undefined;
       selectedText = (event.target as HTMLTextAreaElement).value;
       $("#selection-count").textContent =
         `${selectedText.length.toLocaleString()} characters`;
@@ -813,6 +820,7 @@ function renderChat() {
     navigate("settings");
   };
   $<HTMLSelectElement>("#chat-provider").onchange = guarded(async () => {
+    replacementToken = undefined;
     settings.selected = $<HTMLSelectElement>("#chat-provider").value;
     conversation = [];
     response = "";
@@ -822,6 +830,7 @@ function renderChat() {
     renderChat();
   });
   $("#new-chat").onclick = () => {
+    replacementToken = undefined;
     active?.abort();
     conversationEpoch++;
     conversation = [];
@@ -861,7 +870,7 @@ function renderConversation() {
     });
     return;
   }
-  container.innerHTML = `${conversation.map((m) => `<article class="message ${m.role}"><span class="message-label">${m.role === "user" ? "YOU" : "GOGOGADGET"}</span><div class="message-content">${m.role === "assistant" && markdown ? markdown(m.content) : esc(m.content)}</div></article>`).join("")}${active || response ? `<article class="message assistant"><span class="message-label">GOGOGADGET <span class="stream-dot ${active ? "pulsing" : ""}"></span></span><div class="message-content">${markdown ? markdown(response) : esc(response)}</div>${active ? `<p class="stream-status">${esc(chatStatus || "Connecting…")}</p>` : ""}</article>` : ""}${chatError ? `<div class="chat-error" role="alert">${esc(chatError)}</div>` : ""}${!active && conversation.some((m) => m.role === "assistant") ? `<button id="copy-answer" class="copy-button">${icon("copy")} Copy response</button>` : ""}`;
+  container.innerHTML = `${conversation.map((m) => `<article class="message ${m.role}"><span class="message-label">${m.role === "user" ? "YOU" : "GOGOGADGET"}</span><div class="message-content">${m.role === "assistant" && markdown ? markdown(m.content) : esc(m.content)}</div></article>`).join("")}${active || response ? `<article class="message assistant"><span class="message-label">GOGOGADGET <span class="stream-dot ${active ? "pulsing" : ""}"></span></span><div class="message-content">${markdown ? markdown(response) : esc(response)}</div>${active ? `<p class="stream-status">${esc(chatStatus || "Connecting…")}</p>` : ""}</article>` : ""}${chatError ? `<div class="chat-error" role="alert">${esc(chatError)}</div>` : ""}${!active && conversation.some((m) => m.role === "assistant") ? `<div class="response-actions"><button id="copy-answer" class="copy-button">${icon("copy")} Copy response</button>${desktop && replacementToken && !chatError ? `<button id="replace-answer" class="copy-button">${icon("arrow")} Replace selection</button>` : ""}</div>` : ""}`;
   container.onclick = (event) => {
     const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(
       "a[href]",
@@ -870,6 +879,27 @@ function renderConversation() {
     event.preventDefault();
     guarded(() => openUrl(link.href))();
   };
+  const replace = root.querySelector<HTMLButtonElement>("#replace-answer");
+  if (replace)
+    replace.onclick = guarded(async () => {
+      if (!replacementToken || active || replacing) return;
+      const token = replacementToken;
+      const answer = [...conversation]
+        .reverse()
+        .find((m) => m.role === "assistant")!.content;
+      replacing = true;
+      replacementToken = undefined;
+      selectionToken = undefined;
+      replace.disabled = true;
+      replace.textContent = "Replacing…";
+      try {
+        await replaceSelection(token, answer);
+        toast("Replacement sent to the original text field");
+      } finally {
+        replacing = false;
+        renderConversation();
+      }
+    });
   const copy = root.querySelector<HTMLElement>("#copy-answer");
   if (copy)
     copy.onclick = guarded(async () => {
@@ -883,7 +913,7 @@ function renderConversation() {
 }
 async function ask(text: string, allowManagement = true, displayText = text) {
   text = text.trim();
-  if (!text || active) return;
+  if (!text || active || replacing) return;
   if (allowManagement && isActionRequest(text)) {
     actionRequest = text;
     managingActions = true;
@@ -1015,7 +1045,9 @@ async function boot() {
     if (page === "launcher") $("#query").focus();
     else if (page === "chat" && !active) $("#prompt").focus();
   });
-  await onSelection(({ text, error }) => {
+  await onSelection(({ text, error, token }) => {
+    selectionToken = token ?? undefined;
+    replacementToken = undefined;
     selectedText = text;
     selectionError = error;
     managingActions = false;

@@ -97,6 +97,7 @@ fn main() {
             platform::load_settings,
             platform::save_settings,
             platform::default_cwd,
+            selection::replace_selection,
             quit
         ])
         .run(tauri::generate_context!())

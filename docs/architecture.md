@@ -28,7 +28,7 @@ De Rust-host bevat geen modelnamen of AI-specifieke promptlogica. HTTP is moment
 
 Actiebeheer gebruikt een aparte, begrensde AI-aanvraag met alleen de actiecatalogus en het expliciete beheerverzoek. De uitvoer moet één geldig `add`, `update` of `delete`-voorstel zijn; updates en verwijderingen moeten naar een bestaande ID verwijzen. Het voorstel is inert totdat de gebruiker het opslaat. Geselecteerde tekst en AI-antwoorden worden nooit door de beheerrouter verwerkt. De schema-validatie en deterministische toepassing staan los van modelgedrag.
 
-`src-tauri/src/selection.rs` is de Windows-adapter. Een aparte sneltoets start maximaal één worker met een eigen COM-levensduur. Die vraagt alleen de huidige TextPattern-selectie op, controleert wachtwoordvelden en focus, en emit een snapshot naar de frontend. Het openen wacht maximaal 1,5 seconde; late resultaten worden weggegooid. Bij ontbrekende ondersteuning blijft handmatig plakken beschikbaar. De normale launcher-sneltoets doet geen selectie-opvraag. Er is geen permanente toegankelijkheidslistener, clipboard-watcher of achtergrond-AI-proces.
+`src-tauri/src/selection.rs` is de Windows-adapter. Een aparte sneltoets start op aanvraag één blijvende worker met een eigen COM-levensduur. Die bewaart hoogstens één oorspronkelijk UIA-element en een gekloonde tekstselectie; COM-objecten verlaten deze thread niet. Die vraagt alleen de huidige TextPattern-selectie op, controleert wachtwoordvelden en focus, en emit een snapshot naar de frontend. Het openen wacht maximaal 1,5 seconde; late resultaten worden weggegooid. Bij ontbrekende ondersteuning blijft handmatig plakken beschikbaar. De normale launcher-sneltoets doet geen selectie-opvraag. Er is geen permanente toegankelijkheidslistener, clipboard-watcher of achtergrond-AI-proces.
 
 ## Runtimecontract
 
@@ -94,3 +94,7 @@ Registreer de module in `rebuild()` en neem de geëxporteerde commandservice op 
 ## Overige platformen
 
 De platformlaag zit in `src-tauri/src/platform.rs`. Windows gebruikt `Get-StartApps` voor Win32- en Store-apps en start een gekozen ID via de AppsFolder. Voor macOS is een .app-index/NSWorkspace-adapter nodig; voor Linux een .desktop-index/desktop-entry-adapter. URL-openen heeft al OS-specifieke implementaties. Voor Unix moet een eigen procesgroep met betrouwbare teardown worden toegevoegd. Tauri bundeldoelen en CI moeten vervolgens per platform worden ingesteld. Er is nog geen claim dat macOS of Linux releasewaardig is.
+
+## Terugschrijven naar de selectie (0.1.5)
+
+De native adapter levert een tijdelijk doeltoken bij een enkelvoudige selectie. De UI koppelt dat aan het actiegesprek; handmatige invoerwijzigingen, een nieuwe selectie, een nieuw gesprek en providerwissels verwijderen de UI-koppeling. `replace_selection` accepteert alleen een bestaand token en begrensde tekst zonder ongewenste besturingstekens. De worker verbruikt het doel vóór een poging, controleert het oorspronkelijke element, IsReadOnly, selectie-inhoud en beide UIA-rangegrenzen, herstelt de focus en stuurt één Unicode SendInput-batch. Het klembord blijft ongewijzigd. Een verstreken deadline voorkomt late invoer na vertraagde UIA-calls; er is geen externe timeout die een nog uitvoerbare schrijfopdracht ten onrechte als afgebroken meldt. Bij gedeeltelijke invoer volgt een fout en geen automatische retry.

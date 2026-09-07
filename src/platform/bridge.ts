@@ -137,15 +137,26 @@ export async function onFocus(callback: () => void) {
   }
 }
 export async function onSelection(
-  callback: (selection: { text: string; error: string }) => void,
+  callback: (selection: {
+    text: string;
+    error: string;
+    token: string | null;
+  }) => void,
 ) {
   if (desktop) {
     const { listen } = await import("@tauri-apps/api/event");
-    await listen<{ text: string; error: string }>(
+    await listen<{ text: string; error: string; token: string | null }>(
       "launcher:selection",
       (event) => callback(event.payload),
     );
   }
+}
+export async function replaceSelection(
+  token: string,
+  text: string,
+): Promise<void> {
+  nativeOnly();
+  await invoke("replace_selection", { token, text });
 }
 export async function drag() {
   if (desktop) {

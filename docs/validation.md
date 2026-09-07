@@ -49,3 +49,7 @@ De globale npm-installatie van Codex is bijgewerkt van 0.116.0 naar 0.153.4, omd
 - Initieel JavaScript circa 43,2 kB / 15,1 kB gzip; Markdown blijft een afzonderlijke lazy chunk. Geen nieuwe startup- of geheugencijfers gemeten. De normale launcher-sneltoets doet geen selectie-uitlezing.
 
 De optionele live-actietest is te starten door `GOGOGADGET_ACTION_CODEX_EXE` in te stellen op het volledige pad naar een reeds ingelogde `codex.exe` en `npx vitest run tests/actions.live.test.ts` uit te voeren. Dit verstuurt twee korte inferentieverzoeken met Terra.
+
+## Replace selection 0.1.5
+
+De chat heeft nu Replace selection naast Copy response voor antwoorden op een native opgehaalde selectie. 28 TypeScript-tests en 6 gewone native tests zijn geslaagd; de optionele live-tests zijn overgeslagen. De nieuwe tests controleren exacte token/tekstoverdracht, foutpropagatie zonder retry en afwijzen van lege, te grote of control-character-invoer. TypeScript strict, Clippy en de Windows-releasebuild/NSIS-installer zijn geslaagd. De gebruiker heeft selectie-ophalen in 0.1.4 getoond; daadwerkelijk terugschrijven via SendInput is in deze testomgeving nog niet end-to-end geverifieerd. Controleer bij handmatige acceptatie ook een gewijzigde selectie, een gesloten bronvenster en Unicode/multiline-invoer in de beoogde editor.
