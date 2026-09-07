@@ -39,3 +39,13 @@ Een volledige live-streamingtest is vervolgens geprobeerd. Het startverzoek werk
 ## Terra met bijgewerkte CLI
 
 De globale npm-installatie van Codex is bijgewerkt van 0.116.0 naar 0.153.4, omdat ook `gpt-5.6-terra` door de oude versie werd geweigerd. Via dezelfde native proceshost die Gogogadget gebruikt zijn nu 7 modellen gevonden, waaronder Terra. De optionele test `installed_codex_handshake_and_models` is geslaagd met `GOGOGADGET_LIVE_COMPLETION=1` en `GOGOGADGET_TEST_MODEL=gpt-5.6-terra`: de read-only sessie is gestart en de echte gestreamde reactie was `OK`. Hiervoor was geen wijziging aan de launcher-executable nodig.
+## Tekstacties 0.1.4
+
+- 26 gewone TypeScript-tests geslaagd; de optionele live-actietest wordt standaard overgeslagen.
+- Native tests: 5 geslaagd, 2 bestaande live-tests overgeslagen. Rustfmt en Clippy met `-D warnings` geslaagd.
+- Echte Terra-test geslaagd met de productie-Codex-adapter: een Nederlands verzoek maakte een geldig uitlegactievoorstel, waarna de gegenereerde actie een codefragment met resultaat 6 uitlegde. Alleen twee synthetische testprompts, geen echte selectie of gewijzigde gebruikersinstellingen.
+- Browserpreview: toevoegen, uitschakelen, herladen/behouden en verwijderen van een tijdelijke actie gecontroleerd. Selectie- en beheerpagina visueel gecontroleerd op de launchermaat. Previewdata staan los van desktopinstellingen.
+- De Windows-bedieningsomgeving leverde screenshots maar geen toegankelijkheidsinformatie voor het testvenster in Kladblok. De daadwerkelijke selectie-overdracht vanuit externe apps is daarom nog niet end-to-end bevestigd. Ondersteuning hangt af van de TextPattern-implementatie van de bronapp; handmatig plakken blijft beschikbaar.
+- Initieel JavaScript circa 43,2 kB / 15,1 kB gzip; Markdown blijft een afzonderlijke lazy chunk. Geen nieuwe startup- of geheugencijfers gemeten. De normale launcher-sneltoets doet geen selectie-uitlezing.
+
+De optionele live-actietest is te starten door `GOGOGADGET_ACTION_CODEX_EXE` in te stellen op het volledige pad naar een reeds ingelogde `codex.exe` en `npx vitest run tests/actions.live.test.ts` uit te voeren. Dit verstuurt twee korte inferentieverzoeken met Terra.

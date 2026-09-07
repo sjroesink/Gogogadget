@@ -2,6 +2,7 @@
 mod http;
 mod platform;
 mod process;
+mod selection;
 #[cfg(test)]
 mod tests;
 use tauri::{
@@ -9,7 +10,7 @@ use tauri::{
     tray::TrayIconBuilder,
     Emitter, Manager,
 };
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, ShortcutState};
 
 fn show(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -27,8 +28,12 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _, event| {
+                .with_handler(|app, shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
+                        if shortcut.key == Code::KeyT {
+                            selection::open(app.clone());
+                            return;
+                        }
                         if let Some(window) = app.get_webview_window("main") {
                             if window.is_visible().unwrap_or(false) {
                                 let _ = window.hide();
@@ -45,6 +50,7 @@ fn main() {
         .manage(platform::AppIndex::default())
         .setup(|app| {
             app.global_shortcut().register("Ctrl+Alt+Space")?;
+            app.global_shortcut().register("Ctrl+Alt+T")?;
             let open = MenuItem::with_id(app, "open", "Open Gogogadget", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &quit])?;

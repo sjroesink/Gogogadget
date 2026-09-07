@@ -103,8 +103,7 @@ pub async fn http_request(
             .map_err(|e| e.to_string())?;
         Ok(())
     };
-    let result =
-        tokio::select! { result = work => result, _ = rx => Err("Cancelled".to_string()) };
+    let result = tokio::select! { result = work => result, _ = rx => Err("Cancelled".to_string()) };
     state.requests.lock().await.remove(&id);
     result
 }

@@ -22,6 +22,14 @@ De UI kent het `Provider`-contract, niet het protocol. `src/plugins/catalog.ts` 
 
 De Rust-host bevat geen modelnamen of AI-specifieke promptlogica. HTTP is momenteel afgebakend tot de twee Ollama-paden. De generieke stdio-host voert geconfigureerde executables uit met gescheiden argumenten, leest begrensde frames, verwerkt stderr zonder opslaggroei en sluit de procesboom. Commandinvoer gaat via stdin. Providerconfiguratie is vertrouwd: een gekozen agentprogramma kan lokaal code uitvoeren.
 
+## Declaratieve tekstacties
+
+`src/core/actions.ts` definieert het provideronafhankelijke formaat `{id, title, prompt, enabled}` en valideert zowel opgeslagen acties als AI-voorstellen. De UI verwerkt acties via hetzelfde `Provider.complete`-contract als chat; ACP, Ollama en Codex hebben hiervoor geen aparte implementatie nodig. Een actie start een nieuw gesprek. De UI toont de actietitel en de originele selectie, terwijl de provider de instructies plus de JSON-gequote selectie krijgt. Vervolgvragen behouden die instructies binnen het bestaande historielimiet.
+
+Actiebeheer gebruikt een aparte, begrensde AI-aanvraag met alleen de actiecatalogus en het expliciete beheerverzoek. De uitvoer moet één geldig `add`, `update` of `delete`-voorstel zijn; updates en verwijderingen moeten naar een bestaande ID verwijzen. Het voorstel is inert totdat de gebruiker het opslaat. Geselecteerde tekst en AI-antwoorden worden nooit door de beheerrouter verwerkt. De schema-validatie en deterministische toepassing staan los van modelgedrag.
+
+`src-tauri/src/selection.rs` is de Windows-adapter. Een aparte sneltoets start maximaal één worker met een eigen COM-levensduur. Die vraagt alleen de huidige TextPattern-selectie op, controleert wachtwoordvelden en focus, en emit een snapshot naar de frontend. Het openen wacht maximaal 1,5 seconde; late resultaten worden weggegooid. Bij ontbrekende ondersteuning blijft handmatig plakken beschikbaar. De normale launcher-sneltoets doet geen selectie-opvraag. Er is geen permanente toegankelijkheidslistener, clipboard-watcher of achtergrond-AI-proces.
+
 ## Runtimecontract
 
 Een plugin heeft een unieke `id`, expliciete `requires`, unieke `provides` en een `activate(context)`-functie. De runtime:

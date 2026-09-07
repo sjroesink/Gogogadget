@@ -29,6 +29,7 @@ export interface ProviderConfig {
   cwd: string;
 }
 export interface Settings {
+  actions: import("./actions").TextAction[];
   version: 1;
   selected: string;
   providers: Record<string, ProviderConfig>;

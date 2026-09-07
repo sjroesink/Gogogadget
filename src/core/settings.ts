@@ -1,4 +1,5 @@
 import type { Settings, ProviderConfig } from "./types";
+import { defaultActions, parseActions } from "./actions";
 const base: ProviderConfig = {
   enabled: true,
   model: "",
@@ -9,6 +10,7 @@ const base: ProviderConfig = {
 };
 export const defaults = (): Settings => ({
   version: 1,
+  actions: defaultActions(),
   selected: "codex",
   plugins: { "commands.essentials": true },
   providers: {
@@ -27,6 +29,7 @@ export function parseSettings(value: unknown): Settings {
   if (!value || typeof value !== "object") return result;
   const input = value as Partial<Settings>;
   if (input.version !== 1) throw new Error("Unknown settings version");
+  if (input.actions !== undefined) result.actions = parseActions(input.actions);
   if (
     typeof input.selected === "string" &&
     Object.hasOwn(result.providers, input.selected)

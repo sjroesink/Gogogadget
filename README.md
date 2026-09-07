@@ -11,6 +11,7 @@ Open de app en gebruik **Ctrl+Alt+Space** om het venster te tonen of verbergen. 
 | Toets | Actie |
 |---|---|
 | Ctrl+Alt+Space | Launcher tonen/verbergen, ook buiten de app |
+| Ctrl+Alt+T | Geselecteerde tekst ophalen en tekstacties openen |
 | ↑ / ↓, Enter | Resultaat kiezen en openen |
 | Ctrl+J | AI-gesprek |
 | Ctrl+, | Instellingen |
@@ -18,6 +19,16 @@ Open de app en gebruik **Ctrl+Alt+Space** om het venster te tonen of verbergen. 
 | Esc | Antwoord stoppen, terug, zoekveld wissen of verbergen |
 
 De app indexeert Windows Start-apps eenmaal op de achtergrond. Zoekopdrachten blijven lokaal. Je kunt de index handmatig vernieuwen. AI wordt alleen aangeroepen als je een vraag verstuurt; een webzoekactie opent je standaardbrowser.
+
+## Tekstacties
+
+Selecteer tekst of code in een andere app en druk op **Ctrl+Alt+T**. Controleer de selectie en kies **Translate with AI** of **Rewrite with AI**. Het resultaat verschijnt als een nieuw gesprek, met Markdown en **Copy response** om het terug te plakken. Er wordt niets automatisch in het oorspronkelijke tekstveld vervangen. De vertaalactie vertaalt standaard naar het Engels; wijzig de instructies om een andere doeltaal te kiezen.
+
+Via **Manage actions** kun je acties toevoegen, bewerken, uitschakelen en verwijderen. Een actie bestaat uit een unieke ID, titel, instructies en een enabled-vlag. De geselecteerde tekst wordt automatisch als invoer toegevoegd. Acties gebruiken de gekozen provider en het gekozen model; ze zijn geen uitvoerbare scripts. Ze worden lokaal in het `actions`-veld van `settings.json` opgeslagen. Bestaande installaties krijgen de twee beginacties; een bewust leeggemaakte lijst blijft leeg.
+
+Je kunt ook in **Ask AI** zeggen: “Voeg een actie toe waarmee ik geselecteerde tekst kan laten uitleggen met AI”, of in **Manage actions** beschrijven wat je wilt toevoegen, wijzigen of verwijderen. AI maakt een voorstel dat je kunt aanpassen en opslaan. Voor een verzoek dat niet automatisch herkend wordt, begin je met `/action`. Alleen direct ingevoerde beheeropdrachten openen deze route; geselecteerde tekst en AI-antwoorden kunnen zelf geen acties wijzigen.
+
+Windows-selecties worden op aanvraag gelezen via UI Automation TextPattern, vóór de launcher focus krijgt. Er is geen polling en het klembord wordt niet gelezen of overschreven. Wachtwoordvelden worden overgeslagen. Sommige apps en code-editors publiceren hun selectie niet via toegankelijkheid; kopieer en plak de tekst dan in het selectieveld. Vastlopende providers krijgen maximaal 1,5 seconde voordat het plakveld verschijnt; er kan hoogstens één uitleesworker tegelijk actief zijn. De selectie is begrensd tot 100.000 tekens en blijft alleen in geheugen, totdat een actie haar als chatinvoer gebruikt. macOS/Linux hebben voor deze functie nog een native adapter nodig.
 
 ## Providers instellen
 

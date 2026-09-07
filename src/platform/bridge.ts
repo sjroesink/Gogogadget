@@ -136,6 +136,17 @@ export async function onFocus(callback: () => void) {
     await listen("launcher:focus", callback);
   }
 }
+export async function onSelection(
+  callback: (selection: { text: string; error: string }) => void,
+) {
+  if (desktop) {
+    const { listen } = await import("@tauri-apps/api/event");
+    await listen<{ text: string; error: string }>(
+      "launcher:selection",
+      (event) => callback(event.payload),
+    );
+  }
+}
 export async function drag() {
   if (desktop) {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");

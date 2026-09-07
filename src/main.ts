@@ -2,6 +2,16 @@ import "./styles.css";
 import { Runtime } from "./core/runtime";
 import { SearchIndex } from "./core/search";
 import { defaults } from "./core/settings";
+import {
+  actionPrompt,
+  applyProposal,
+  isActionRequest,
+  parseActions,
+  parseProposal,
+  proposalPrompt,
+  type ActionProposal,
+  type TextAction,
+} from "./core/actions";
 import type {
   AppEntry,
   Command,
@@ -20,6 +30,7 @@ import {
   openUrl,
   hide,
   onFocus,
+  onSelection,
   drag,
   quit,
 } from "./platform/bridge";
@@ -64,7 +75,16 @@ const $ = <T extends HTMLElement = HTMLElement>(selector: string) =>
 let settings: Settings = defaults();
 let runtime = new Runtime();
 let apps: AppEntry[] = [];
-let page: "launcher" | "chat" | "plugins" | "settings" = "launcher";
+let page: "launcher" | "chat" | "plugins" | "settings" | "actions" = "launcher";
+let selectedText = "";
+let selectionError = "";
+let managingActions = false;
+let editingAction = "";
+let actionRequest = "";
+let actionProposal: ActionProposal | undefined;
+let actionGeneration: AbortController | undefined;
+let actionError = "";
+let savingActions = false;
 let filter = "all";
 let query = "";
 let selection = 0;
@@ -73,6 +93,7 @@ let searchMs = 0;
 let active: AbortController | undefined;
 let discovery: AbortController | undefined;
 let conversation: Message[] = [];
+const actionInputs = new WeakMap<Message, string>();
 let response = "";
 let markdown: ((text: string) => string) | undefined;
 let markdownLoading: Promise<void> | undefined;
@@ -110,6 +131,30 @@ function provider(): Provider {
 }
 function essentials(): Command[] {
   return [
+    {
+      id: "text-actions",
+      title: "Text actions",
+      subtitle: "Use selected text · Ctrl+Alt+T",
+      keywords: "selection translate rewrite text actions",
+      icon: "spark",
+      kind: "command",
+      run: () => {
+        managingActions = false;
+        navigate("actions");
+      },
+    },
+    {
+      id: "manage-actions",
+      title: "Manage text actions",
+      subtitle: "Add, edit or remove actions, yourself or with AI",
+      keywords: "actions prompts templates manage add create",
+      icon: "settings",
+      kind: "command",
+      run: () => {
+        managingActions = true;
+        navigate("actions");
+      },
+    },
     {
       id: "plugins",
       title: "Manage your plugins",
@@ -263,6 +308,7 @@ async function refreshApps(refresh = false) {
   if (page === "launcher") renderResults();
 }
 function navigate(next: typeof page) {
+  if (next !== "actions") actionGeneration?.abort();
   if (next !== "settings") discovery?.abort();
   page = next;
   render();
@@ -282,6 +328,7 @@ function render() {
   if (page === "plugins") renderPlugins();
   if (page === "settings") renderSettings();
   if (page === "chat") renderChat();
+  if (page === "actions") renderActions();
 }
 function renderLauncher() {
   $("#view").innerHTML =
@@ -553,6 +600,200 @@ function renderSettings() {
   $("#footer-status").textContent =
     "Models are fetched directly from your provider";
 }
+async function persistActions(next: TextAction[]) {
+  if (savingActions) throw new Error("An action is already being saved.");
+  const value = { ...settings, actions: parseActions(next) };
+  savingActions = true;
+  try {
+    await saveSettings(value);
+    settings.actions = value.actions;
+    rebuildIndex();
+  } finally {
+    savingActions = false;
+  }
+}
+async function runTextAction(action: TextAction) {
+  if (active)
+    throw new Error("Stop the current response before running a text action.");
+  const prompt = actionPrompt(action, selectedText);
+  provider();
+  conversationEpoch++;
+  conversation = [];
+  response = "";
+  chatError = "";
+  navigate("chat");
+  await ask(prompt, false, `${action.title}\n\n${selectedText}`);
+}
+function renderActions() {
+  const current = settings.actions.find((a) => a.id === editingAction);
+  const proposal = actionProposal;
+  $("#view").innerHTML =
+    `${heading("Text actions", "Select text in another app, then press Ctrl+Alt+T.")}<nav class="tabs"><button id="use-actions" class="${managingActions ? "" : "selected"}">Use actions</button><button id="manage-actions" class="${managingActions ? "selected" : ""}">Manage actions</button></nav><section class="actions-body">${
+      managingActions
+        ? `
+    <form id="action-ai-form" class="action-ai"><label for="action-request">Describe an action to add, change or remove</label><div class="model-field"><input id="action-request" maxlength="2000" value="${esc(actionRequest)}" placeholder="Add an action that explains selected code" ${actionGeneration ? "disabled" : ""}/><button class="secondary" type="submit">${actionGeneration ? "Stop" : "Create proposal"}</button></div><p class="field-help">Uses your selected AI provider. Review the proposal before saving.</p></form>
+    ${actionError ? `<p class="chat-error" role="alert">${esc(actionError)}</p>` : ""}
+    ${proposal ? `<form id="proposal-form" class="action-proposal config-form"><strong>${proposal.operation === "delete" ? "Remove action" : "Review action"}</strong>${proposal.operation === "delete" ? `<p>${esc(settings.actions.find((a) => a.id === proposal.id)?.title ?? proposal.id)}</p>` : `<label>Title<input name="title" maxlength="80" required value="${esc(proposal.title)}"/></label><label>Instructions<textarea name="instructions" maxlength="3000" rows="4" required>${esc(proposal.prompt)}</textarea></label>`}<div class="form-actions"><button type="button" id="discard-proposal" class="secondary">Discard</button><button class="primary" type="submit">${proposal.operation === "delete" ? "Remove action" : "Save action"}</button></div></form>` : ""}
+    <form id="action-editor" class="config-form action-editor"><div class="form-grid"><label>Action<select id="action-choice"><option value="">New action</option>${settings.actions.map((a) => `<option value="${esc(a.id)}" ${a.id === editingAction ? "selected" : ""}>${esc(a.title)}</option>`).join("")}</select></label><label>Title<input name="title" maxlength="80" value="${esc(current?.title ?? "")}" placeholder="Explain with AI" required/></label></div><label>Instructions<textarea name="instructions" maxlength="3000" rows="3" placeholder="Explain the selected text clearly, with examples." required>${esc(current?.prompt ?? "")}</textarea></label><p class="field-help">Selected text is appended automatically. Change the translation language or writing style here.</p><div class="form-actions"><label class="checkbox"><input type="checkbox" name="enabled" ${current?.enabled !== false ? "checked" : ""}/> Enabled</label>${current ? `<button id="delete-action" type="button" class="secondary">Delete action</button>` : ""}<button type="submit" class="primary">${current ? "Save changes" : "Add action"}</button></div></form>
+  `
+        : `
+    <label for="selected-text">Selected text <span id="selection-count">${selectedText.length.toLocaleString()} characters</span></label><textarea id="selected-text" maxlength="100000" rows="5" placeholder="Selected text appears here. You can also paste or type text.">${esc(selectedText)}</textarea>
+    ${selectionError ? `<p class="field-help" role="status">${esc(selectionError)}</p>` : ""}<p class="field-help">Only sent to ${esc(providerInfo.find((p) => p.id === settings.selected)!.name)} when you choose an action. The result opens in chat; copy it back when ready.</p><div class="text-action-list">${
+      settings.actions
+        .filter((a) => a.enabled)
+        .map(
+          (a) =>
+            `<button class="text-action" data-text-action="${esc(a.id)}">${icon("spark")}<span>${esc(a.title)}</span>${icon("arrow")}</button>`,
+        )
+        .join("") || `<p>No enabled actions. Add one in Manage actions.</p>`
+    }</div>
+  `
+    }</section>`;
+  bindBack();
+  $("#use-actions").onclick = () => {
+    actionGeneration?.abort();
+    managingActions = false;
+    renderActions();
+  };
+  $("#manage-actions").onclick = () => {
+    managingActions = true;
+    renderActions();
+  };
+  $("#footer-status").textContent =
+    "Text actions · your prompts, your AI provider";
+  if (!managingActions) {
+    $<HTMLTextAreaElement>("#selected-text").oninput = (event) => {
+      selectedText = (event.target as HTMLTextAreaElement).value;
+      $("#selection-count").textContent =
+        `${selectedText.length.toLocaleString()} characters`;
+    };
+    root
+      .querySelectorAll<HTMLButtonElement>("[data-text-action]")
+      .forEach((button) => {
+        button.onclick = guarded(() =>
+          runTextAction(
+            settings.actions.find((a) => a.id === button.dataset.textAction)!,
+          ),
+        );
+      });
+    (
+      root.querySelector<HTMLButtonElement>("[data-text-action]") ??
+      $("#selected-text")
+    ).focus();
+    return;
+  }
+  $<HTMLInputElement>("#action-request").oninput = (event) => {
+    actionRequest = (event.target as HTMLInputElement).value;
+  };
+  $<HTMLFormElement>("#action-ai-form").onsubmit = (event) => {
+    event.preventDefault();
+    if (actionGeneration) actionGeneration.abort();
+    else guarded(generateAction)();
+  };
+  $<HTMLSelectElement>("#action-choice").onchange = (event) => {
+    editingAction = (event.target as HTMLSelectElement).value;
+    renderActions();
+  };
+  $<HTMLFormElement>("#action-editor").onsubmit = (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    guarded(async () => {
+      const data = new FormData(form);
+      const action: TextAction = {
+        id: current?.id ?? crypto.randomUUID(),
+        title: String(data.get("title")),
+        prompt: String(data.get("instructions")),
+        enabled: data.has("enabled"),
+      };
+      await persistActions(
+        current
+          ? settings.actions.map((a) => (a.id === current.id ? action : a))
+          : [...settings.actions, action],
+      );
+      editingAction = action.id;
+      if (page === "actions") renderActions();
+      toast("Action saved");
+    })();
+  };
+  if (current)
+    $("#delete-action").onclick = guarded(async () => {
+      await persistActions(settings.actions.filter((a) => a.id !== current.id));
+      editingAction = "";
+      if (page === "actions") renderActions();
+      toast("Action removed");
+    });
+  if (proposal) {
+    $("#discard-proposal").onclick = () => {
+      actionProposal = undefined;
+      renderActions();
+    };
+    $<HTMLFormElement>("#proposal-form").onsubmit = (event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget as HTMLFormElement);
+      guarded(async () => {
+        const edited =
+          proposal.operation === "delete"
+            ? proposal
+            : {
+                ...proposal,
+                title: String(data.get("title")),
+                prompt: String(data.get("instructions")),
+              };
+        await persistActions(applyProposal(settings.actions, edited));
+        actionProposal = undefined;
+        actionRequest = "";
+        if (page === "actions") renderActions();
+        toast("Action changes saved");
+      })();
+    };
+  }
+}
+async function generateAction() {
+  if (!actionRequest.trim() || actionGeneration) return;
+  if (actionRequest.length > 2000)
+    throw new Error("Describe your action in at most 2,000 characters.");
+  if (active)
+    throw new Error(
+      "Stop the current chat response before creating an action.",
+    );
+  const ai = provider();
+  const controller = new AbortController();
+  actionGeneration = controller;
+  actionProposal = undefined;
+  actionError = "";
+  const request = proposalPrompt(actionRequest, settings.actions);
+  const signal = AbortSignal.any([
+    controller.signal,
+    AbortSignal.timeout(60_000),
+  ]);
+  renderActions();
+  let output = "";
+  try {
+    await ai.complete({
+      model: settings.providers[settings.selected].model,
+      messages: [{ role: "user", content: request }],
+      signal,
+      onStatus() {},
+      onText(chunk) {
+        if (controller.signal.aborted) return;
+        output += chunk;
+        if (output.length > 16_000) {
+          actionError = "Action proposal is too large. Try a shorter request.";
+          controller.abort();
+        }
+      },
+    });
+    signal.throwIfAborted();
+    actionProposal = parseProposal(output, settings.actions);
+  } catch (e) {
+    actionError = controller.signal.aborted
+      ? actionError || "Action generation stopped."
+      : String(e);
+  } finally {
+    if (actionGeneration === controller) actionGeneration = undefined;
+    if (page === "actions") renderActions();
+  }
+}
 function renderChat() {
   markdownLoading ??= import("./core/markdown")
     .then((module) => {
@@ -640,9 +881,16 @@ function renderConversation() {
     });
   if (atBottom) container.scrollTop = container.scrollHeight;
 }
-async function ask(text: string) {
+async function ask(text: string, allowManagement = true, displayText = text) {
   text = text.trim();
   if (!text || active) return;
+  if (allowManagement && isActionRequest(text)) {
+    actionRequest = text;
+    managingActions = true;
+    navigate("actions");
+    await generateAction();
+    return;
+  }
   let ai: Provider;
   try {
     ai = provider();
@@ -653,11 +901,16 @@ async function ask(text: string) {
   const controller = new AbortController();
   const epoch = conversationEpoch;
   active = controller;
-  conversation.push({ role: "user", content: text });
+  const message: Message = { role: "user", content: displayText.trim() };
+  if (!allowManagement) actionInputs.set(message, text);
+  conversation.push(message);
   response = "";
   chatError = "";
   chatStatus = "Connecting…";
-  const history = conversation.slice(-20);
+  const history = conversation.slice(-20).map((message) => ({
+    ...message,
+    content: actionInputs.get(message) ?? message.content,
+  }));
   let frame: ReturnType<typeof setTimeout> | undefined;
   const update = () => {
     if (!frame)
@@ -761,6 +1014,12 @@ async function boot() {
   await onFocus(() => {
     if (page === "launcher") $("#query").focus();
     else if (page === "chat" && !active) $("#prompt").focus();
+  });
+  await onSelection(({ text, error }) => {
+    selectedText = text;
+    selectionError = error;
+    managingActions = false;
+    navigate("actions");
   });
 }
 void boot().catch((e) => {
